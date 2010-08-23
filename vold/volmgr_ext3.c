@@ -157,7 +157,8 @@ int ext_mount(blkdev_t *dev, volume_t *vol, boolean safe_mode)
  
     char **f;
     for (f = fs; *f != NULL; f++) {
-        rc = mount(devpath, vol->mount_point, *f, flags, NULL);
+        //rc = mount(devpath, vol->mount_point, *f, flags, NULL);
+        rc = mount(devpath, vol->mount_point, *f, flags, "user_xattr");
         if (rc && errno == EROFS) {
             LOGE("ext_mount(%s, %s): Read only filesystem - retrying mount RO",
                  devpath, vol->mount_point);

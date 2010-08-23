@@ -1,0 +1,27 @@
+diff --git a/vold/volmgr.c b/vold/volmgr.c
+index deb680e..a5f5789 100644
+--- a/vold/volmgr.c
++++ b/vold/volmgr.c
+@@ -43,7 +43,7 @@ static volume_t *vol_root = NULL;
+ static boolean safe_mode = true;
+ 
+ static struct volmgr_fstable_entry fs_table[] = {
+-//    { "ext3", ext_identify, ext_check, ext_mount , true },
++    { "ext3", ext_identify, ext_check, ext_mount , true },
+     { "vfat", vfat_identify, vfat_check, vfat_mount , false },
+     { NULL, NULL, NULL, NULL , false}
+ };
+diff --git a/vold/volmgr_ext3.c b/vold/volmgr_ext3.c
+index fe3b2bb..8979c70 100644
+--- a/vold/volmgr_ext3.c
++++ b/vold/volmgr_ext3.c
+@@ -157,7 +157,8 @@ int ext_mount(blkdev_t *dev, volume_t *vol, boolean safe_mode)
+  
+     char **f;
+     for (f = fs; *f != NULL; f++) {
+-        rc = mount(devpath, vol->mount_point, *f, flags, NULL);
++        //rc = mount(devpath, vol->mount_point, *f, flags, NULL);
++        rc = mount(devpath, vol->mount_point, *f, flags, "user_xattr");
+         if (rc && errno == EROFS) {
+             LOGE("ext_mount(%s, %s): Read only filesystem - retrying mount RO",
+                  devpath, vol->mount_point);
