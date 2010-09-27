@@ -38,6 +38,9 @@ int socket_local_client(const char *name, int namespaceId, int type)
 #include <sys/types.h>
 
 #include "socket_local.h"
+//#include "loghack.h"
+//#include <cutils/log.h>
+//#define LOG_TAG "socket_local_client"
 
 #define LISTEN_BACKLOG 4
 
@@ -45,6 +48,7 @@ int socket_local_client(const char *name, int namespaceId, int type)
 int socket_make_sockaddr_un(const char *name, int namespaceId, 
         struct sockaddr_un *p_addr, socklen_t *alen)
 {
+    //LOGW("phornyac: socket_make_sockaddr_un(): entered");
     memset (p_addr, 0, sizeof (*p_addr));
     size_t namelen;
 
@@ -109,8 +113,10 @@ int socket_make_sockaddr_un(const char *name, int namespaceId,
 
     p_addr->sun_family = AF_LOCAL;
     *alen = namelen + offsetof(struct sockaddr_un, sun_path) + 1;
+    //LOGW("phornyac: socket_make_sockaddr_un(): returning 0");
     return 0;
 error:
+    //LOGW("phornyac: socket_make_sockaddr_un(): returning -1");
     return -1;
 }
 
@@ -129,13 +135,18 @@ int socket_local_client_connect(int fd, const char *name, int namespaceId,
     size_t namelen;
     int err;
 
+    //LOGW("phornyac: socket_local_client_connect(): entered");
     err = socket_make_sockaddr_un(name, namespaceId, &addr, &alen);
+    //LOGW("phornyac: socket_local_client_connect(): socket_make_sockaddr_un() "
+    //        "returned err=%d", err);
 
     if (err < 0) {
         goto error;
     }
 
     if(connect(fd, (struct sockaddr *) &addr, alen) < 0) {
+        //LOGW("phornyac: socket_local_client_connect(): connect() "
+        //        "returned < 0");
         goto error;
     }
 
@@ -153,13 +164,20 @@ int socket_local_client(const char *name, int namespaceId, int type)
 {
     int s;
 
+    //LOGW("phornyac: socket_local_client(): entered");
     s = socket(AF_LOCAL, type, 0);
+    //LOGW("phornyac: socket_local_client(): socket() returned "
+    //        "s=%d", s);
     if(s < 0) return -1;
 
     if ( 0 > socket_local_client_connect(s, name, namespaceId, type)) {
+        //LOGW("phornyac: socket_local_client(): socket_local_client_connect() "
+        //        "returned < 0");
         close(s);
         return -1;
     }
+    //LOGW("phornyac: socket_local_client(): socket_local_client_connect() "
+    //        "returned ok");
 
     return s;
 }
