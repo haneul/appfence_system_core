@@ -230,6 +230,20 @@ on boot
 
 ## Daemon processes to be run by init.
 ##
+
+# Start policy daemon as early as possible:
+service policyd /system/bin/logwrapper /system/bin/policyd
+    socket policyd stream 666
+#   socket zygote stream 666
+#user exampleservice
+#group exampleservice
+#socket <name> <type> <perm> [ <user> [ <group> ] ]
+#   Create a unix domain socket named /dev/socket/<name> and pass
+#   its fd to the launched process.  <type> must be "dgram" or "stream".
+#   User and group default to 0.
+#oneshot
+#   Do not restart the service when it exits.
+
 service console /system/bin/sh
     console
 
