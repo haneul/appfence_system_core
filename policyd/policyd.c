@@ -14,17 +14,17 @@
  * limitations under the License.
  */
 
-//#include <string.h>
-//#include <sys/types.h>
-//#include <sys/wait.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
 #include <errno.h>
-//#include <fcntl.h>
+#include <utils/Log.h>
+#include <cutils/sockets.h>
+//#include "cutils/log.h"
+#include "policyd.h"
 
-//#include "private/android_filesystem_config.h"
-#include "cutils/log.h"
+#define SOCKETNAME "policyd"
+#define BACKLOG 12  /* No idea if this is appropriate... */
 
 void fatal(const char *msg) {
     fprintf(stderr, msg);
@@ -43,30 +43,117 @@ void usage() {
 #define SECONDS 20
 
 int main(int argc, char* argv[]) {
-    int i;
+    int i, ret;
+    struct sockaddr addr;
+    socklen_t alen;
+    int fd, s;
+    char sa_data[15];
 
-    LOG(LOG_ERROR, "policyd", 
-            "phornyac: policyd main entered, argc=%d\n", argc);
-    LOG(LOG_ERROR, "policyd", 
-            "phornyac: sleeping for %d secs to wait for logging to start\n",
+    LOGW("phornyac: main: entered, argc=%d\n", argc);
+    LOGW("phornyac: main: sleeping for %d secs to wait for logging to start\n",
             SECONDS);
     sleep(SECONDS);
     for (i = 0; i < argc; i++) {
-        LOG(LOG_ERROR, "policyd", 
-                "phornyac: argv[%d]=%s\n", i, argv[i]);
+        LOGW("phornyac: main: argv[%d]=%s\n", i, argv[i]);
     }
 
-    i=1;
+//TODO:
+#if 0
+    /* set as high priority, and protect from OOM killer */
+    setpriority(PRIO_PROCESS, 0, -20);
+    protect_from_oom_killer();
+    get_time(&now);
+#endif
+
+    /* Initialize the policy database: */
+    ret = initialize_policydb();
+    if (ret) {
+        LOGW("phornyac: main: initialize_policydb() returned %d, exiting",
+                ret);
+        exit(1);
+    }
+
+    s = android_get_control_socket(SOCKETNAME);
+    if (s < 0) {
+        //LOGW("phornyac: main: error message: %s", sys_errlist[errno]);
+        LOGW("phornyac: main: error number: %d", errno);
+        LOGW("phornyac: main: could not open socket \"%s\", exiting",
+                SOCKETNAME);
+        exit(1);
+    }
+    if (listen(s, BACKLOG) < 0) {
+        //LOGW("phornyac: main: error message: %s", sys_errlist[errno]);
+        LOGW("phornyac: main: error number: %d", errno);
+        LOGW("phornyac: main: could not listen on socket \"%s\", exiting",
+                SOCKETNAME);
+        exit(2);
+    }
+    
+    alen = sizeof(addr);
+
+    /**
+     * Loop, accepting socket connections as they occur...
+     */
     while (1) {
-        sleep(SECONDS);
-        i++;
-        LOG(LOG_ERROR, "policyd", 
-                "phornyac: alive for %d secs, sleeping again for %d secs\n",
-                SECONDS*i, SECONDS);
-    }
+        /* "If no pending connections are present on the queue, and the
+         *  socket is not marked as non-blocking,  accept()  blocks
+         *  the  caller  until  a  connection  is present.  If the socket
+         *  is marked non-blocking and no pending connections are
+         *  present on the queue, accept() fails with the error EAGAIN or
+         *  EWOULDBLOCK."
+         */
+        LOGW("phornyac: main: calling accept()");
+        fd = accept(s, &addr, &alen);
+        if (fd < 0) {
+            //LOGW("phornyac: main: error message: %s", sys_errlist[errno]);
+            LOGW("phornyac: main: error number: %d", errno);
+            LOGW("phornyac: main: could not accept socket connection, "
+                    "looping again");
+            continue;
+        } else {
+            for (i = 0; i < 14; i++)
+                sa_data[i] = addr.sa_data[i];
+            sa_data[14] = '\0';
+            LOGW("phornyac: main: accepted new socket connection, "
+                    "family=%d, data=%s",
+                    (int)addr.sa_family, sa_data);
+        }
 
-    LOG(LOG_ERROR, "policyd", 
-            "phornyac: reached end of policyd main, returning 0\n");
+        /* Handle the accepted connection: */
+        ret = handle_connection(s);
+        if (ret) {
+            LOGW("phornyac: main: handle_connection() returned %d, "
+                    "but doing nothing about it.",
+                    ret);
+        }
+
+        LOGW("phornyac: main: closing socket connection and looping again");
+        close(fd);
+    }
+    
+    LOGW("phornyac: reached end of policyd main, returning 0\n");
+    return 0;
+}
+
+/**
+ * Initializes the policy database: ...
+ * Returns: 0 on success, negative on error.
+ */
+int initialize_policydb() {
+    LOGW("phornyac: initialize_policydb(): entered\n");
+
+    LOGW("phornyac: initialize_policydb(): returning 0\n");
+    return 0;
+}
+
+/**
+ * Handles a connection on the given socket fd. ...
+ * Returns: 0 on success, negative on error.
+ */
+int handle_connection(int sock_fd) {
+    LOGW("phornyac: handle_connection(): entered\n");
+
+    LOGW("phornyac: handle_connection(): returning 0\n");
     return 0;
 }
 
