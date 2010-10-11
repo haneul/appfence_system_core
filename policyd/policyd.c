@@ -17,6 +17,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
+#include <poll.h>
 #include <errno.h>
 #include <utils/Log.h>
 #include <cutils/sockets.h>
@@ -27,8 +28,11 @@
 #define LOG_TAG "policyd"
 #endif
 
-#define SOCKETNAME "policyd"
-#define BACKLOG 12  /* No idea if this is appropriate... */
+#define POLL_NFDS 2        /* Number of fds we need to poll/select on */
+#define POLL_TIMEOUT -1    /* Negative means infinite timeout */
+#define BACKLOG 12         /* No idea if this is appropriate... */
+#define SECONDS 20
+#define MAX_ERRORS 100     /* Maximum number of errors before we exit */
 
 void fatal(const char *msg) {
     fprintf(stderr, msg);
@@ -44,16 +48,15 @@ void usage() {
         "...\n");
 }
 
-#define SECONDS 20
-
 int main(int argc, char* argv[]) {
-    int i, ret;
-    struct sockaddr addr;
-    socklen_t alen;
-    int fd, s;
-    char sa_data[15];
+    int i, ret, err_count;
+    int sockfd_settings, sockfd_app;
+    nfds_t poll_nfds;
+    int poll_timeout;
+    struct pollfd poll_fds[POLL_NFDS];
 
     LOGW("phornyac: main: entered, argc=%d\n", argc);
+    err_count = 0;
     LOGW("phornyac: main: sleeping for %d secs to wait for logging to start\n",
             SECONDS);
     sleep(SECONDS);
@@ -74,66 +77,147 @@ int main(int argc, char* argv[]) {
     if (ret) {
         LOGW("phornyac: main: initialize_policydb() returned %d, exiting",
                 ret);
-        exit(1);
+        exit(-1);
     }
 
-    s = android_get_control_socket(SOCKETNAME);
-    if (s < 0) {
-        //LOGW("phornyac: main: error message: %s", sys_errlist[errno]);
+    /**
+     * Open the socket that the Settings app connects to to perform
+     * policy database updates:
+     */
+    sockfd_settings = android_get_control_socket(POLICYD_UPDATESOCK);
+    if (sockfd_settings < 0) {
         LOGW("phornyac: main: error number: %d", errno);
         LOGW("phornyac: main: could not open socket \"%s\", exiting",
-                SOCKETNAME);
-        exit(1);
+                POLICYD_UPDATESOCK);
+        exit(-1);
     }
-    if (listen(s, BACKLOG) < 0) {
-        //LOGW("phornyac: main: error message: %s", sys_errlist[errno]);
+    if (listen(sockfd_settings, 1) < 0) {
         LOGW("phornyac: main: error number: %d", errno);
         LOGW("phornyac: main: could not listen on socket \"%s\", exiting",
-                SOCKETNAME);
-        exit(2);
+                POLICYD_UPDATESOCK);
+        exit(-1);
+    }
+ 
+    /**
+     * Open the socket that application VMs connect to to request 
+     * policy checks:
+     */
+    sockfd_app = android_get_control_socket(POLICYD_SOCK);
+    if (sockfd_app < 0) {
+        LOGW("phornyac: main: error number: %d", errno);
+        LOGW("phornyac: main: could not open socket \"%s\", exiting",
+                POLICYD_SOCK);
+        exit(-1);
+    }
+    if (listen(sockfd_app, BACKLOG) < 0) {
+        LOGW("phornyac: main: error number: %d", errno);
+        LOGW("phornyac: main: could not listen on socket \"%s\", exiting",
+                POLICYD_SOCK);
+        exit(-1);
     }
     
-    alen = sizeof(addr);
+    /**
+     * Set up the data structures for poll/select. We only care about
+     * being able to accept (read) on our socket fds, so set events to
+     * just POLLIN.
+     *
+     * In order to be notified of incoming connections on a socket, you can use
+     * select(2) or poll(2).   A  _readable_  event
+     * will  be  delivered when a new connection is attempted and you may
+     * then call accept() to get a socket for that con‐
+     * nection.  Alternatively, you can set the socket to deliver
+     * SIGIO when activity occurs on a  socket;  see  socket(7)
+     * for details.
+     */
+    poll_nfds = POLL_NFDS;
+    poll_timeout = POLL_TIMEOUT;
+    poll_fds[0].fd = sockfd_settings;
+    poll_fds[1].fd = sockfd_app;
+    poll_fds[0].events = POLLIN;
+    poll_fds[1].events = POLLIN;
+    if (1+1 != POLL_NFDS) {
+        LOGE("phornyac: main: should have %d poll_fds, exiting",
+                POLL_NFDS);
+        exit(-1);
+    }
 
     /**
      * Loop, accepting socket connections as they occur...
      */
     while (1) {
-        /* "If no pending connections are present on the queue, and the
-         *  socket is not marked as non-blocking,  accept()  blocks
-         *  the  caller  until  a  connection  is present.  If the socket
-         *  is marked non-blocking and no pending connections are
-         *  present on the queue, accept() fails with the error EAGAIN or
-         *  EWOULDBLOCK."
-         */
-        LOGW("phornyac: main: calling accept(%d)", s);
-        fd = accept(s, &addr, &alen);
-        if (fd < 0) {
-            //LOGW("phornyac: main: error message: %s", sys_errlist[errno]);
+        if (err_count >= MAX_ERRORS) {
+            LOGW("phornyac: main: reached max number of errors (%d), "
+                    "exiting", err_count);
+            exit(-1);
+        }
+
+        /* Poll on the fds we're waiting for connections from: */
+        ret = poll((struct pollfd *)poll_fds, poll_nfds, poll_timeout);
+        if (ret < 0) {
             LOGW("phornyac: main: error number: %d", errno);
-            LOGW("phornyac: main: could not accept socket connection, "
-                    "looping again");
+            LOGW("phornyac: main: poll() returned %d, "
+                    "looping again", ret);
+            err_count++;
             continue;
-        } else {
-            for (i = 0; i < 14; i++)
-                sa_data[i] = addr.sa_data[i];
-            sa_data[14] = '\0';
-            LOGW("phornyac: main: accepted new socket connection, "
-                    "fd=%d, family=%d, data=%s",
-                    fd, (int)addr.sa_family, sa_data);
         }
-
-        /* Handle the accepted connection: */
-        ret = handle_connection(fd);
-        //ret = handle_connection(s);
-        if (ret) {
-            LOGW("phornyac: main: handle_connection() returned %d, "
-                    "but doing nothing about it",
-                    ret);
+        else if (ret == 0) {
+            LOGW("phornyac: main: poll() timed out... re-looping");
+            err_count++;
+            continue;
         }
+        LOGW("phornyac: main: poll() returned %d fds ready to read",
+                ret);
 
-        LOGW("phornyac: main: closing socket connection and looping again");
-        close(fd);
+        /**
+         * Handle the fds that are ready to be read:
+         */
+        for (i = 0; i < POLL_NFDS; i++) {
+            if (poll_fds[i].revents & (POLLERR | POLLHUP | POLLNVAL)) {
+                LOGW("phornyac: main: poll_fds[%d] has error 0x%X "
+                        "(POLLERR=0x%X, POLLHUP=0x%X, POLLNVAL=0x%X), "
+                        "continuing",
+                        i, poll_fds[i].revents,
+                        POLLERR, POLLHUP, POLLNVAL);
+                err_count++;
+                continue;
+            } else if (poll_fds[i].revents & POLLIN) {
+                LOGW("phornyac: main: poll_fds[%d] has event POLLIN",
+                        i);
+                switch(i) {
+                case 0:  /* sockfd_settings */
+                    ret = handle_connect_settings(sockfd_settings);
+                    if (ret) {
+                        LOGW("phornyac: main: handle_connect_settings() "
+                                "returned %d, doing nothing",
+                                ret);
+                        err_count++;
+                    }
+                    break;
+                case 1:  /* sockfd_app */
+                    ret = handle_connect_app(sockfd_app);
+                    if (ret) {
+                        LOGW("phornyac: main: handle_connect_app() "
+                                "returned %d, doing nothing",
+                                ret);
+                        err_count++;
+                    }
+                    break;
+               default:
+                    LOGW("phornyac: main: reached default case; "
+                            "this is an error, doing nothing");
+                    err_count++;
+                }
+            } else {
+                /**
+                 * poll() didn't get a POLLIN or an error for this fd,
+                 * so do nothing.
+                 */
+                LOGW("phornyac: main: nothing to do for poll_fds[%d]",
+                        i);
+            }
+        }
+        LOGW("phornyac: main: reached end of while loop, err_count=%d",
+                err_count);
     }
     
     LOGW("phornyac: reached end of policyd main, returning 0\n");
@@ -152,13 +236,94 @@ int initialize_policydb() {
 }
 
 /**
+ * Accepts a connection from the Settings app on the given socket
+ * and handles the request/update...
+ * Returns: 0 on success, negative on error.
+ */
+int handle_connect_settings(int sockfd) {
+    LOGW("phornyac: handle_connect_settings: entered");
+
+    LOGW("phornyac: handle_connect_settings: returning 0");
+    return 0; 
+}
+
+/**
+ * Accepts a connection from an application VM on the given socket
+ * and handles it...
+ * Returns: 0 on success, negative on error.
+ */
+int handle_connect_app(int sockfd) {
+    int i, ret;
+    struct sockaddr addr;
+    socklen_t alen;
+    int accept_fd;
+    char sa_data[15];
+
+    LOGW("phornyac: handle_connect_app: entered");
+
+    /**
+     * There should be a connection waiting to be accepted on
+     * sockfd. TODO: set the sockets to non-blocking, so that if
+     * for some reason there's an error here, we won't wait block
+     * forever!
+     *
+     * "If no pending connections are present on the queue, and the
+     *  socket is not marked as non-blocking,  accept()  blocks
+     *  the  caller  until  a  connection  is present.  If the socket
+     *  is marked non-blocking and no pending connections are
+     *  present on the queue, accept() fails with the error EAGAIN or
+     *  EWOULDBLOCK."
+     */
+    LOGW("phornyac: handle_connect_app: calling accept(%d)",
+            sockfd);
+    alen = sizeof(addr);
+    ret = accept(sockfd, &addr, &alen);
+    LOGW("phornyac: handle_connect_app: accept() returned %d", ret);
+    if (ret < 0) {
+        LOGW("phornyac: handle_connect_app: error number: %d",
+                errno);
+        LOGW("phornyac: handle_connect_app: could not accept "
+                "socket connection, returning -1");
+        return -1;
+    } else {
+        accept_fd = ret;
+        for (i = 0; i < 14; i++)
+            sa_data[i] = addr.sa_data[i];
+        sa_data[14] = '\0';
+        LOGW("phornyac: handle_connect_app: accepted new socket connection, "
+                "accept_fd=%d, family=%d, data=%s",
+                accept_fd, (int)addr.sa_family, sa_data);
+    }
+    
+    /* Handle the accepted connection: */
+    ret = handle_connection(accept_fd);
+    if (ret) {
+        LOGW("phornyac: handle_connect_app: handle_connection() "
+                "returned %d, so closing accept_fd %d and "
+                "returning -1", accept_fd, ret);
+        close(accept_fd);
+        return -1;
+    }
+    LOGW("phornyac: handle_connect_app: handle_connection() "
+            "returned ok");
+
+    /* Cleanup: */
+    LOGW("phornyac: handle_connect_app: closing socket "
+            "connection %d", accept_fd);
+    close(accept_fd);
+
+    LOGW("phornyac: handle_connect_app: returning 0");
+    return 0; 
+}
+
+/**
  * Handles a connection on the given socket fd. ...
  * Returns: 0 on success, negative on error.
  */
-int handle_connection(int sock_fd) {
+int handle_connection(int sockfd) {
     LOGW("phornyac: handle_connection(): entered\n");
     int ret;
-    size_t msg_size;
+    int msg_size;
     policyd_msg msg_send;
 
     /* Construct the message: */
@@ -167,8 +332,8 @@ int handle_connection(int sock_fd) {
 
     msg_size = sizeof(msg_send);
     LOGW("phornyac: handle_connection: calling write(%d) with msg=%s, "
-            "msg_size=%d", sock_fd, msg_send.msg, msg_size);
-    ret = write(sock_fd, &msg_send, msg_size);
+            "msg_size=%d", sockfd, msg_send.msg, msg_size);
+    ret = write(sockfd, &msg_send, msg_size);
     if (ret < 0) {
         LOGW("phornyac: handle_connection: error number: %d", errno);
         LOGW("phornyac: handle_connection: write() returned error, "
@@ -187,140 +352,3 @@ int handle_connection(int sock_fd) {
     return 0;
 }
 
-#if 0
-void parent(const char *tag, int seg_fault_on_exit, int parent_read) {
-    int status;
-    char buffer[4096];
-
-    int a = 0;  // start index of unprocessed data
-    int b = 0;  // end index of unprocessed data
-    int sz;
-    while ((sz = read(parent_read, &buffer[b], sizeof(buffer) - 1 - b)) > 0) {
-
-        sz += b;
-        // Log one line at a time
-        for (b = 0; b < sz; b++) {
-            if (buffer[b] == '\r') {
-                buffer[b] = '\0';
-            } else if (buffer[b] == '\n') {
-                buffer[b] = '\0';
-                LOG(LOG_INFO, tag, &buffer[a]);
-                a = b + 1;
-            }
-        }
-
-        if (a == 0 && b == sizeof(buffer) - 1) {
-            // buffer is full, flush
-            buffer[b] = '\0';
-            LOG(LOG_INFO, tag, &buffer[a]);
-            b = 0;
-        } else if (a != b) {
-            // Keep left-overs
-            b -= a;
-            memmove(buffer, &buffer[a], b);
-            a = 0;
-        } else {
-            a = 0;
-            b = 0;
-        }
-
-    }
-    // Flush remaining data
-    if (a != b) {
-        buffer[b] = '\0';
-        LOG(LOG_INFO, tag, &buffer[a]);
-    }
-    status = 0xAAAA;
-    if (wait(&status) != -1) {  // Wait for child
-        if (WIFEXITED(status))
-            LOG(LOG_INFO, "logwrapper", "%s terminated by exit(%d)", tag,
-                    WEXITSTATUS(status));
-        else if (WIFSIGNALED(status))
-            LOG(LOG_INFO, "logwrapper", "%s terminated by signal %d", tag,
-                    WTERMSIG(status));
-        else if (WIFSTOPPED(status))
-            LOG(LOG_INFO, "logwrapper", "%s stopped by signal %d", tag,
-                    WSTOPSIG(status));
-    } else
-        LOG(LOG_INFO, "logwrapper", "%s wait() failed: %s (%d)", tag,
-                strerror(errno), errno);
-    if (seg_fault_on_exit)
-        *(int *)status = 0;  // causes SIGSEGV with fault_address = status
-}
-
-void child(int argc, char* argv[]) {
-    // create null terminated argv_child array
-    char* argv_child[argc + 1];
-    memcpy(argv_child, argv, argc * sizeof(char *));
-    argv_child[argc] = NULL;
-
-    if (execvp(argv_child[0], argv_child)) {
-        LOG(LOG_ERROR, "logwrapper",
-            "executing %s failed: %s\n", argv_child[0], strerror(errno));
-        exit(-1);
-    }
-}
-
-int main(int argc, char* argv[]) {
-    pid_t pid;
-    int seg_fault_on_exit = 0;
-
-    int parent_ptty;
-    int child_ptty;
-    char *child_devname = NULL;
-
-    if (argc < 2) {
-        usage();
-    }
-
-    if (strncmp(argv[1], "-d", 2) == 0) {
-        seg_fault_on_exit = 1;
-        argc--;
-        argv++;
-    }
-
-    if (argc < 2) {
-        usage();
-    }
-
-    /* Use ptty instead of socketpair so that STDOUT is not buffered */
-    parent_ptty = open("/dev/ptmx", O_RDWR);
-    if (parent_ptty < 0) {
-        fatal("Cannot create parent ptty\n");
-    }
-
-    if (grantpt(parent_ptty) || unlockpt(parent_ptty) ||
-            ((child_devname = (char*)ptsname(parent_ptty)) == 0)) {
-        fatal("Problem with /dev/ptmx\n");
-    }
-
-    pid = fork();
-    if (pid < 0) {
-        fatal("Failed to fork\n");
-    } else if (pid == 0) {
-        child_ptty = open(child_devname, O_RDWR);
-        if (child_ptty < 0) {
-            fatal("Problem with child ptty\n");
-        }
-
-        // redirect stdout and stderr
-        close(parent_ptty);
-        dup2(child_ptty, 1);
-        dup2(child_ptty, 2);
-        close(child_ptty);
-
-        child(argc - 1, &argv[1]);
-
-    } else {
-        // switch user and group to "log"
-        // this may fail if we are not root, 
-        // but in that case switching user/group is unnecessary 
-        setgid(AID_LOG);
-        setuid(AID_LOG);
-
-        parent(argv[1], seg_fault_on_exit, parent_ptty);
-    }
-
-    return 0;
-}
-#endif

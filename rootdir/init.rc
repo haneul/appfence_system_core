@@ -234,6 +234,7 @@ on boot
 # Start policy daemon as early as possible:
 service policyd /system/bin/logwrapper /system/bin/policyd
     socket policyd stream 666
+    socket policyd_update stream 660 system system
 #   socket zygote stream 666
 #   socket dumpstate stream 0660 shell log
 #user exampleservice
