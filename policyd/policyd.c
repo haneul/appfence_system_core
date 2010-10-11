@@ -20,8 +20,12 @@
 #include <errno.h>
 #include <utils/Log.h>
 #include <cutils/sockets.h>
-//#include "cutils/log.h"
-#include "policyd.h"
+#include <cutils/policyd.h>
+
+#ifdef LOG_TAG
+#undef LOG_TAG
+#define LOG_TAG "policyd"
+#endif
 
 #define SOCKETNAME "policyd"
 #define BACKLOG 12  /* No idea if this is appropriate... */
@@ -102,7 +106,7 @@ int main(int argc, char* argv[]) {
          *  present on the queue, accept() fails with the error EAGAIN or
          *  EWOULDBLOCK."
          */
-        LOGW("phornyac: main: calling accept()");
+        LOGW("phornyac: main: calling accept(%d)", s);
         fd = accept(s, &addr, &alen);
         if (fd < 0) {
             //LOGW("phornyac: main: error message: %s", sys_errlist[errno]);
@@ -115,15 +119,16 @@ int main(int argc, char* argv[]) {
                 sa_data[i] = addr.sa_data[i];
             sa_data[14] = '\0';
             LOGW("phornyac: main: accepted new socket connection, "
-                    "family=%d, data=%s",
-                    (int)addr.sa_family, sa_data);
+                    "fd=%d, family=%d, data=%s",
+                    fd, (int)addr.sa_family, sa_data);
         }
 
         /* Handle the accepted connection: */
-        ret = handle_connection(s);
+        ret = handle_connection(fd);
+        //ret = handle_connection(s);
         if (ret) {
             LOGW("phornyac: main: handle_connection() returned %d, "
-                    "but doing nothing about it.",
+                    "but doing nothing about it",
                     ret);
         }
 
@@ -152,8 +157,33 @@ int initialize_policydb() {
  */
 int handle_connection(int sock_fd) {
     LOGW("phornyac: handle_connection(): entered\n");
+    int ret;
+    size_t msg_size;
+    policyd_msg msg_send;
 
-    LOGW("phornyac: handle_connection(): returning 0\n");
+    /* Construct the message: */
+    strncpy(msg_send.msg, "Test message from server to client",
+            POLICYD_MSG_SIZE);
+
+    msg_size = sizeof(msg_send);
+    LOGW("phornyac: handle_connection: calling write(%d) with msg=%s, "
+            "msg_size=%d", sock_fd, msg_send.msg, msg_size);
+    ret = write(sock_fd, &msg_send, msg_size);
+    if (ret < 0) {
+        LOGW("phornyac: handle_connection: error number: %d", errno);
+        LOGW("phornyac: handle_connection: write() returned error, "
+                "returning -1");
+        return -1;
+    }
+    if (ret != msg_size) {
+        LOGW("phornyac: handle_connection: error number: %d", errno);
+        LOGW("phornyac: handle_connection: write() returned %d < %d, "
+                "returning -2", ret, msg_size);
+        return -2;
+    }
+    LOGW("phornyac: handle_connection: write() returned success");
+
+    LOGW("phornyac: handle_connection(): returning 0");
     return 0;
 }
 
