@@ -185,18 +185,18 @@ int main(int argc, char* argv[]) {
                         i);
                 switch(i) {
                 case 0:  /* sockfd_settings */
-                    ret = handle_connect_settings(sockfd_settings);
+                    ret = accept_settings(sockfd_settings);
                     if (ret) {
-                        LOGW("phornyac: main: handle_connect_settings() "
+                        LOGW("phornyac: main: accept_settings() "
                                 "returned %d, doing nothing",
                                 ret);
                         err_count++;
                     }
                     break;
                 case 1:  /* sockfd_app */
-                    ret = handle_connect_app(sockfd_app);
+                    ret = accept_app(sockfd_app);
                     if (ret) {
-                        LOGW("phornyac: main: handle_connect_app() "
+                        LOGW("phornyac: main: accept_app() "
                                 "returned %d, doing nothing",
                                 ret);
                         err_count++;
@@ -240,26 +240,11 @@ int initialize_policydb() {
  * and handles the request/update...
  * Returns: 0 on success, negative on error.
  */
-int handle_connect_settings(int sockfd) {
-    LOGW("phornyac: handle_connect_settings: entered");
-
-    LOGW("phornyac: handle_connect_settings: returning 0");
-    return 0; 
-}
-
-/**
- * Accepts a connection from an application VM on the given socket
- * and handles it...
- * Returns: 0 on success, negative on error.
- */
-int handle_connect_app(int sockfd) {
+int accept_settings(int sockfd) {
     int i, ret;
-    struct sockaddr addr;
-    socklen_t alen;
-    int accept_fd;
-    char sa_data[15];
+    int accepted_fd;
 
-    LOGW("phornyac: handle_connect_app: entered");
+    LOGW("phornyac: accept_settings: entered");
 
     /**
      * There should be a connection waiting to be accepted on
@@ -274,15 +259,134 @@ int handle_connect_app(int sockfd) {
      *  present on the queue, accept() fails with the error EAGAIN or
      *  EWOULDBLOCK."
      */
-    LOGW("phornyac: handle_connect_app: calling accept(%d)",
+    LOGW("phornyac: accept_settings: calling accept(%d)",
+            sockfd);
+    ret = accept_new(sockfd);
+    if (ret < 0) {
+        LOGW("phornyac: accept_settings: accept_new() returned "
+               "error %d, returning -1", ret);
+        return -1;
+    } else {
+        accepted_fd = ret;
+        LOGW("phornyac: accept_settings: accept_new() returned "
+               "accepted_fd=%d", accepted_fd);
+    }
+
+    /* Handle the accepted connection: */
+    ret = handle_connection_settings(accepted_fd);
+    if (ret) {
+        LOGW("phornyac: accept_settings: handle_connection_settings() "
+                "returned %d, so closing accepted_fd %d and "
+                "returning -1", accepted_fd, ret);
+        close(accepted_fd);
+        return -1;
+    }
+    LOGW("phornyac: accept_settings: handle_connection_settings() "
+            "returned ok");
+
+    /* Cleanup: */
+    LOGW("phornyac: accept_settings: closing socket "
+            "connection %d", accepted_fd);
+    close(accepted_fd);
+
+    LOGW("phornyac: accept_settings: returning 0");
+    return 0; 
+}
+
+/**
+ * Accepts a connection from an application VM on the given socket
+ * and handles it...
+ * Returns: 0 on success, negative on error.
+ */
+int accept_app(int sockfd) {
+    int i, ret;
+    int accepted_fd;
+
+    LOGW("phornyac: accept_app: entered");
+
+    /**
+     * There should be a connection waiting to be accepted on
+     * sockfd. TODO: set the sockets to non-blocking, so that if
+     * for some reason there's an error here, we won't wait block
+     * forever!
+     *
+     * "If no pending connections are present on the queue, and the
+     *  socket is not marked as non-blocking,  accept()  blocks
+     *  the  caller  until  a  connection  is present.  If the socket
+     *  is marked non-blocking and no pending connections are
+     *  present on the queue, accept() fails with the error EAGAIN or
+     *  EWOULDBLOCK."
+     */
+    LOGW("phornyac: accept_app: calling accept(%d)",
+            sockfd);
+    ret = accept_new(sockfd);
+    if (ret < 0) {
+        LOGW("phornyac: accept_app: accept_new() returned "
+               "error %d, returning -1", ret);
+        return -1;
+    } else {
+        accepted_fd = ret;
+        LOGW("phornyac: accept_app: accept_new() returned "
+               "accepted_fd=%d", accepted_fd);
+    }
+
+    /* Handle the accepted connection: */
+    ret = handle_connection_app(accepted_fd);
+    if (ret) {
+        LOGW("phornyac: accept_app: handle_connection_app() "
+                "returned %d, so closing accepted_fd %d and "
+                "returning -1", accepted_fd, ret);
+        close(accepted_fd);
+        return -1;
+    }
+    LOGW("phornyac: accept_app: handle_connection_app() "
+            "returned ok");
+
+    /* Cleanup: */
+    LOGW("phornyac: accept_app: closing socket "
+            "connection %d", accepted_fd);
+    close(accepted_fd);
+
+    LOGW("phornyac: accept_app: returning 0");
+    return 0; 
+}
+
+/**
+ * Generic function to accept a connection on the given socket.
+ * NOTE: on success, it is the caller's job to close the socket fd!
+ * Returns: the fd of the accepted connection, or negative on error.
+ */
+int accept_new(int sockfd) {
+    int i, ret;
+    struct sockaddr addr;
+    socklen_t alen;
+    int accept_fd;
+    char sa_data[15];
+
+    LOGW("phornyac: accept_new: entered");
+
+    /**
+     * There should be a connection waiting to be accepted on
+     * sockfd. TODO: set the sockets to non-blocking, so that if
+     * for some reason there's an error here, we won't wait block
+     * forever!
+     *
+     * "If no pending connections are present on the queue, and the
+     *  socket is not marked as non-blocking,  accept()  blocks
+     *  the  caller  until  a  connection  is present.  If the socket
+     *  is marked non-blocking and no pending connections are
+     *  present on the queue, accept() fails with the error EAGAIN or
+     *  EWOULDBLOCK."
+     */
+    LOGW("phornyac: accept_new: calling accept(%d)",
             sockfd);
     alen = sizeof(addr);
     ret = accept(sockfd, &addr, &alen);
-    LOGW("phornyac: handle_connect_app: accept() returned %d", ret);
+    LOGW("phornyac: accept_new: accept() returned %d", ret);
     if (ret < 0) {
-        LOGW("phornyac: handle_connect_app: error number: %d",
+        LOGW("phornyac: accept_new: error number: %d",
                 errno);
-        LOGW("phornyac: handle_connect_app: could not accept "
+        LOGW("phornyac: accept_new: could not accept "
                 "socket connection, returning -1");
         return -1;
     } else {
@@ -290,38 +394,60 @@ int handle_connect_app(int sockfd) {
         for (i = 0; i < 14; i++)
             sa_data[i] = addr.sa_data[i];
         sa_data[14] = '\0';
-        LOGW("phornyac: handle_connect_app: accepted new socket connection, "
+        LOGW("phornyac: accept_new: accepted new socket connection, "
                 "accept_fd=%d, family=%d, data=%s",
                 accept_fd, (int)addr.sa_family, sa_data);
     }
-    
-    /* Handle the accepted connection: */
-    ret = handle_connection(accept_fd);
-    if (ret) {
-        LOGW("phornyac: handle_connect_app: handle_connection() "
-                "returned %d, so closing accept_fd %d and "
-                "returning -1", accept_fd, ret);
-        close(accept_fd);
-        return -1;
-    }
-    LOGW("phornyac: handle_connect_app: handle_connection() "
-            "returned ok");
 
-    /* Cleanup: */
-    LOGW("phornyac: handle_connect_app: closing socket "
-            "connection %d", accept_fd);
-    close(accept_fd);
-
-    LOGW("phornyac: handle_connect_app: returning 0");
-    return 0; 
+    LOGW("phornyac: accept_new: returning accepted fd %d",
+            accept_fd);
+    return accept_fd;
 }
 
 /**
- * Handles a connection on the given socket fd. ...
+ * Handles a connection from the Settings application on the
+ * given socket fd...
  * Returns: 0 on success, negative on error.
  */
-int handle_connection(int sockfd) {
-    LOGW("phornyac: handle_connection(): entered\n");
+int handle_connection_settings(int sockfd) {
+    int ret;
+    int msg_size;
+    policyd_msg msg_send;
+
+    LOGW("phornyac: handle_connection_settings: entered");
+
+    /* Construct the message: */
+    strncpy(msg_send.msg, "Test message from server to client",
+            POLICYD_MSG_SIZE);
+
+    msg_size = sizeof(msg_send);
+    LOGW("phornyac: handle_connection_settings: calling write(%d) with msg=%s, "
+            "msg_size=%d", sockfd, msg_send.msg, msg_size);
+    ret = write(sockfd, &msg_send, msg_size);
+    if (ret < 0) {
+        LOGW("phornyac: handle_connection_settings: error number: %d", errno);
+        LOGW("phornyac: handle_connection_settings: write() returned error, "
+                "returning -1");
+        return -1;
+    }
+    if (ret != msg_size) {
+        LOGW("phornyac: handle_connection_settings: error number: %d", errno);
+        LOGW("phornyac: handle_connection_settings: write() returned %d < %d, "
+                "returning -2", ret, msg_size);
+        return -2;
+    }
+    LOGW("phornyac: handle_connection_settings: write() returned success");
+
+    LOGW("phornyac: handle_connection_settings: returning 0");
+    return 0;
+}
+ /**
+ * Handles a connection from an application VM on the
+ * given socket fd...
+ * Returns: 0 on success, negative on error.
+ */
+int handle_connection_app(int sockfd) {
+    LOGW("phornyac: handle_connection_app: entered\n");
     int ret;
     int msg_size;
     policyd_msg msg_send;
@@ -331,24 +457,24 @@ int handle_connection(int sockfd) {
             POLICYD_MSG_SIZE);
 
     msg_size = sizeof(msg_send);
-    LOGW("phornyac: handle_connection: calling write(%d) with msg=%s, "
+    LOGW("phornyac: handle_connection_app: calling write(%d) with msg=%s, "
             "msg_size=%d", sockfd, msg_send.msg, msg_size);
     ret = write(sockfd, &msg_send, msg_size);
     if (ret < 0) {
-        LOGW("phornyac: handle_connection: error number: %d", errno);
-        LOGW("phornyac: handle_connection: write() returned error, "
+        LOGW("phornyac: handle_connection_app: error number: %d", errno);
+        LOGW("phornyac: handle_connection_app: write() returned error, "
                 "returning -1");
         return -1;
     }
     if (ret != msg_size) {
-        LOGW("phornyac: handle_connection: error number: %d", errno);
-        LOGW("phornyac: handle_connection: write() returned %d < %d, "
+        LOGW("phornyac: handle_connection_app: error number: %d", errno);
+        LOGW("phornyac: handle_connection_app: write() returned %d < %d, "
                 "returning -2", ret, msg_size);
         return -2;
     }
-    LOGW("phornyac: handle_connection: write() returned success");
+    LOGW("phornyac: handle_connection_app: write() returned success");
 
-    LOGW("phornyac: handle_connection(): returning 0");
+    LOGW("phornyac: handle_connection_app: returning 0");
     return 0;
 }
 

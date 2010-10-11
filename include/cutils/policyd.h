@@ -13,7 +13,9 @@ typedef struct policyd_message {
 } policyd_msg;
 
 int initialize_policydb();
-int handle_connect_settings(int);
-int handle_connect_app(int);
-int handle_connection(int);
+int accept_settings(int);
+int accept_app(int);
+int accept_new(int);
+int handle_connection_settings(int);
+int handle_connection_app(int);
 
