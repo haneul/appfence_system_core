@@ -31,7 +31,9 @@
 /**
  * Policy request and response codes. UPDATE codes are only for use
  * by the "Settings" app that has permission to access policyd's
- * update socket (see system/core/rootdir/init.rc).
+ * update socket (see system/core/rootdir/init.rc). Note that some
+ * update operations are handled by the policyd server and may not
+ * cause any db operations.
  */
 enum {
     POLICY_BASE = 0,
@@ -44,7 +46,7 @@ enum {
     POLICY_UPDATE_DEL,        //Remove all matching entries from policy db
     POLICY_RESP_ALLOW,        //Allow this transmission to proceed
     POLICY_RESP_BLOCK,        //Block this transmission
-    POLICY_RESP_SUCCESS,      //Db update succeeded
+    POLICY_RESP_SUCCESS,      //Update succeeded
 };
 
 /**

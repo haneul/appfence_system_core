@@ -39,7 +39,7 @@ int construct_policy_req(policy_req *msg, int request_code,
  *   is filled. If an error is returned, the caller should close the
  *   socket.
  */
-int request_policy_decision(int sockfd, policy_req *request,
+int send_policy_request(int sockfd, policy_req *request,
         policy_resp *response);
 
 #endif

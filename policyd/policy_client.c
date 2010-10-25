@@ -35,60 +35,82 @@ int construct_policy_req(policy_req *msg, int request_code,
         const char *process_name, const char *dest_name,
         int taint_tag) {
     LOGW("phornyac: construct_policy_req: entered");
-    if (strlen(process_name) >= POLICYD_STRING_SIZE) {
-        LOGW("phornyac: construct_policy_req: processName too long, "
-                "returning -1");
-        return -1;
-    }
-    if (strlen(dest_name) >= POLICYD_STRING_SIZE) {
-        LOGW("phornyac: construct_policy_req: destName too long, "
+    if (msg == NULL) {
+        LOGW("phornyac: construct_policy_req: msg is NULL, "
                 "returning -1");
         return -1;
     }
 
-    /* Some of these fields are currently unused */
     msg->request_code = request_code;
-    strncpy(msg->entry.process_name, process_name, POLICYD_STRING_SIZE-1);
-    msg->entry.process_name[POLICYD_STRING_SIZE-1] = '\0';
-    strncpy(msg->entry.dest_name, dest_name, POLICYD_STRING_SIZE-1);
-    msg->entry.dest_name[POLICYD_STRING_SIZE-1] = '\0';
     msg->entry.taint_tag = taint_tag;
-    msg->entry.app_status = -1;
+    msg->entry.app_status = -1;  /* currently unused */
+    
+    if (process_name == NULL) {
+        LOGW("phornyac: construct_policy_req: warning, process_name "
+                "is NULL!");
+        msg->entry.process_name[0] = '\0';
+    } else {
+        if (strlen(process_name) >= POLICYD_STRING_SIZE) {
+            LOGW("phornyac: construct_policy_req: process_name too long, "
+                    "returning -1");
+            return -1;
+        }
+        strncpy(msg->entry.process_name, process_name,
+                POLICYD_STRING_SIZE-1);
+        msg->entry.process_name[POLICYD_STRING_SIZE-1] = '\0';
+    }
+
+    if (dest_name == NULL) {
+        LOGW("phornyac: construct_policy_req: warning, dest_name "
+                "is NULL!");
+        msg->entry.dest_name[0] = '\0';
+    } else {
+        if (strlen(dest_name) >= POLICYD_STRING_SIZE) {
+            LOGW("phornyac: construct_policy_req: dest_name too long, "
+                    "returning -1");
+            return -1;
+        }
+        strncpy(msg->entry.dest_name, dest_name,
+                POLICYD_STRING_SIZE-1);
+        msg->entry.dest_name[POLICYD_STRING_SIZE-1] = '\0';
+    }
 
     LOGW("phornyac: construct_policy_req: returning sizeof(policy_req) "
             "(%d)", sizeof(policy_req));
     return (sizeof(policy_req));
 }
 
-int request_policy_decision(int sockfd, policy_req *request,
+int send_policy_request(int sockfd, policy_req *request,
         policy_resp *response) {
     int ret;
-    LOGW("phornyac: request_policy_decision: entered");
+    LOGW("phornyac: send_policy_request: entered");
 
-    LOGW("phornyac: request_policy_decision: calling send_policy_req() "
+    LOGW("phornyac: send_policy_request: calling send_policy_req() "
             "with sockfd=%d", sockfd);
     ret = send_policy_req(sockfd, request);
     if (ret < 0) {
-        LOGW("phornyac: request_policy_decision: send_policy_req() "
+        LOGW("phornyac: send_policy_request: send_policy_req() "
                 "returned error=%d", ret);
-        LOGW("phornyac: request_policy_decision: returning -1");
+        LOGW("phornyac: send_policy_request: returning -1");
         return -1;
     }
 
-    LOGW("phornyac: request_policy_decision: send_policy_req() succeeded, "
+    LOGW("phornyac: send_policy_request: send_policy_req() succeeded, "
             "calling recv_policy_resp()");
     ret = recv_policy_resp(sockfd, response);
     if (ret < 0) {
-        LOGW("phornyac: request_policy_decision: recv_policy_resp() "
+        LOGW("phornyac: send_policy_request: recv_policy_resp() "
                 "returned error=%d", ret);
-        LOGW("phornyac: request_policy_decision: returning -1");
+        LOGW("phornyac: send_policy_request: returning -1");
         return -1;
     }
-    LOGW("phornyac: request_policy_decision: recv_policy_resp() succeeded, "
+    //TODO XXX: recv_policy_resp() is returning 0 on certain errors (server
+    //  closes socket), so we're saying success here!!!
+    LOGW("phornyac: send_policy_request: recv_policy_resp() succeeded, "
             "printing response");
     print_policy_resp(response);
 
-    LOGW("phornyac: request_policy_decision: returning 0");
+    LOGW("phornyac: send_policy_request: returning 0");
     return 0;
 
             //bytes_read = 0;

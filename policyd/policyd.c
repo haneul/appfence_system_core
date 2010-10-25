@@ -31,13 +31,24 @@
 #define LOG_TAG "policyd"
 #endif
 
-//#define POLL_NFDS 2        /* Number of fds we need to poll/select on */
-//#define POLL_TIMEOUT -1    /* Negative means infinite timeout */
 #define BACKLOG 12           /* No idea if this is appropriate... */
 #define MAX_ERRORS 100       /* Maximum number of errors before we exit */
 #define SECONDS 20
 #define RESPONSE_TIMEOUT 5   /* Seconds that we wait for app to read() our reply */
 #undef DELAY_START
+
+/**
+ * Extremely important global variables:
+ *   global_enable_enforcement: 0 means that enforcement has been disabled
+ *     and all queries will return "allow"; anything else means that
+ *     enforcement will be performed as usual.
+ *   global_default_allow: 1 means that we default to "allowing" a
+ *     transmission if there are no matching entries in the policy db;
+ *     0 means that we block all transmissions UNLESS there is at least
+ *     one matching entry in the db.
+ */
+int global_enable_enforcement = 1;
+int global_default_allow = 1;
 
 void fatal(const char *msg) {
     fprintf(stderr, msg);
@@ -78,28 +89,182 @@ int construct_policy_resp(policy_resp *msg, int response_code) {
     return (sizeof(policy_resp));
 }
 
-#if 0
 /**
- * Handles a request from the connection to the Settings application
- * on the given socket fd. First read()s the message from the socket,
- * then write()s a message back.
- * Returns: 0 on success, negative on error.
+ * Queries the policy db with the given entry and determines
+ * the appropriate response.
+ * Returns: a response code, or negative on error.
  */
-int handle_request_settings(int sockfd) {
+int handle_query(policy_entry *entry) {
     int ret;
-    int msg_size;
-    policy_req msg_send;
 
-    LOGW("phornyac: handle_request_settings: entered");
+    if (global_enable_enforcement == 0) {
+        LOGW("phornyac: handle_query: policy enforcement is disabled, "
+                "returning POLICY_RESP_ALLOW");
+        return POLICY_RESP_ALLOW;
+    }
+    LOGW("phornyac: handle_query: global_enable_enforcement is set, "
+            "continuing with enforcement");
 
-    //XXX: this gets called when the socket is ready for READING;
-    //  need to update it to read() first, then write()!
+    LOGW("phornyac: handle_query: calling query_policydb()");
+    ret = query_policydb(entry);
+    if (ret < 0) {
+        LOGW("phornyac: handle_query: query_policydb() returned "
+                "error=%d, returning -1", ret);
+        return -1;
+    } else if (ret == 0) {
+        LOGW("phornyac: handle_query: query_policydb() returned 0, "
+                "no entries match");
+        if (global_default_allow) {
+            LOGW("phornyac: handle_query: default is to allow, so "
+                    "returning POLICY_RESP_ALLOW");
+            return POLICY_RESP_ALLOW;
+        } else {
+            LOGW("phornyac: handle_query: default is to deny, so "
+                    "returning POLICY_RESP_BLOCK");
+            return POLICY_RESP_BLOCK;
+        }
+    } else {
+        LOGW("phornyac: handle_query: query_policydb() returned %d "
+                "matching entries", ret);
+        if (global_default_allow) {
+            LOGW("phornyac: handle_query: default is to allow, so "
+                    "returning POLICY_RESP_BLOCK");
+            return POLICY_RESP_BLOCK;
+        } else {
+            LOGW("phornyac: handle_query: default is to deny, so "
+                    "returning POLICY_RESP_ALLOW");
+            return POLICY_RESP_ALLOW;
+        }
+    }
 
-    LOGW("phornyac: handle_request_settings: NEEDS RE-IMPLEMENTING, "
-        "RETURNING 0");
-    return 0;
+    return -1;
 }
+
+/**
+ * Returns: a response code, or negative on error.
+ */
+int handle_add_entry(policy_entry *entry) {
+    int ret;
+
+    LOGW("phornyac: handle_add_entry: calling add_policydb_entry()");
+    ret = add_policydb_entry(entry);
+    if (ret != 1) {
+        LOGW("phornyac: handle_add_entry: add_policydb_entry() did "
+                "not return 1, so we're returning -1");
+        return -1;
+    }
+
+    LOGW("phornyac: handle_add_entry: add_policydb_entry() returned "
+            "%d entry added, returning POLICY_RESP_SUCCESS", ret);
+    return POLICY_RESP_SUCCESS;
+}
+
+/**
+ * Returns: a response code, or negative on error.
+ */
+int handle_del_entry(policy_entry *entry) {
+    int ret;
+
+    LOGW("phornyac: handle_del_entry: calling remove_policydb_entries()");
+    ret = remove_policydb_entries(entry);
+    if (ret < 0) {
+        LOGW("phornyac: handle_del_entry: remove_policydb_entries() "
+                "returned error, so we're returning -1");
+        return -1;
+    }
+
+    LOGW("phornyac: handle_add_entry: remove_policydb_entries() returned "
+            "%d entries removed, returning POLICY_RESP_SUCCESS", ret);
+    return POLICY_RESP_SUCCESS;
+    return -1;
+}
+
+/**
+ * Examines the request code for the incoming request, takes the
+ * appropriate action, and returns a response code to be sent back
+ * to the client. Certain actions can only be performed if the
+ * request is from the Settings app.
+ * Returns: a response code, or negative on error.
+ */
+int switch_on_request(policy_req *request, int from_settings) {
+    int ret;
+    LOGW("phornyac: switch_on_request: entered");
+    
+#if 0
+    POLICY_REQ_QUERY,         //Query the db for this transmission
+    POLICY_UPDATE_ENABLE,     //Globally enable policy enforcement
+    POLICY_UPDATE_DISABLE,    //Globally disable policy enforcement
+    POLICY_UPDATE_DEF_ALLOW,  //Change enforcement to default-allow
+    POLICY_UPDATE_DEF_DENY,   //Change enforcement to default-deny
+    POLICY_UPDATE_ADD,        //Add entry to policy db
+    POLICY_UPDATE_DEL,        //Remove all matching entries from policy db
+    POLICY_RESP_ALLOW,        //Allow this transmission to proceed
+    POLICY_RESP_BLOCK,        //Block this transmission
+    POLICY_RESP_SUCCESS,      //Db update succeeded
 #endif
+
+    switch (request->request_code) {
+    case POLICY_REQ_QUERY:
+        LOGW("phornyac: switch_on_request: case POLICY_REQ_QUERY");
+        if (from_settings) {
+            LOGW("phornyac: switch_on_request: from_settings is true, "
+                    "is this really what we want??");
+        }
+        return handle_query(&(request->entry));
+    case POLICY_UPDATE_ENABLE:
+        LOGW("phornyac: switch_on_request: case POLICY_UPDATE_ENABLE");
+        if (!from_settings)
+            goto no_permission;
+        global_enable_enforcement = 1;
+        LOGW("phornyac: switch_on_request: set global_enable_enforcement=%d",
+                global_enable_enforcement);
+        return POLICY_RESP_SUCCESS;
+    case POLICY_UPDATE_DISABLE:
+        LOGW("phornyac: switch_on_request: case POLICY_UPDATE_DISABLE");
+        if (!from_settings)
+            goto no_permission;
+        global_enable_enforcement = 0;
+        LOGW("phornyac: switch_on_request: set global_enable_enforcement=%d",
+                global_enable_enforcement);
+        return POLICY_RESP_SUCCESS;
+    case POLICY_UPDATE_DEF_ALLOW:
+        LOGW("phornyac: switch_on_request: case POLICY_UPDATE_DEF_ALLOW");
+        if (!from_settings)
+            goto no_permission;
+        global_default_allow = 1;
+        LOGW("phornyac: switch_on_request: set global_default_allow=%d",
+                global_default_allow);
+        return POLICY_RESP_SUCCESS;
+    case POLICY_UPDATE_DEF_DENY:
+        LOGW("phornyac: switch_on_request: case POLICY_UPDATE_DEF_DENY");
+        if (!from_settings)
+            goto no_permission;
+        global_default_allow = 0;
+        LOGW("phornyac: switch_on_request: set global_default_allow=%d",
+                global_default_allow);
+        return POLICY_RESP_SUCCESS;
+    case POLICY_UPDATE_ADD:
+        LOGW("phornyac: switch_on_request: case POLICY_UPDATE_ADD");
+        if (!from_settings)
+            goto no_permission;
+        return handle_add_entry(&(request->entry));
+     case POLICY_UPDATE_DEL:
+        LOGW("phornyac: switch_on_request: case POLICY_UPDATE_DEL");
+        if (!from_settings)
+            goto no_permission;
+        return handle_del_entry(&(request->entry));
+    default:
+        LOGW("phornyac: switch_on_request: default case, returning error");
+        return -1;
+    }
+
+    LOGW("phornyac: switch_on_request: reached end, returning -1");
+    return -1;
+no_permission:
+    LOGW("phornyac: switch_on_request: received update from an app "
+            "that's not the Settings app, returning -1");
+    return -1;
+}
 
 /**
  * Handles a connection from an application VM or from the Settings
@@ -116,13 +281,8 @@ int handle_request(int sockfd, int from_settings) {
     int ret, size;
     policy_req request;
     policy_resp response;
+    int response_code;
     LOGW("phornyac: handle_request: entered");
-
-    if (from_settings) {
-        LOGW("phornyac: handle_request: from_settings is set, but "
-                "not implemented yet!!!");
-        return -1;
-    }
 
     /* First, get the request: */
     ret = recv_policy_req(sockfd, &request);
@@ -141,11 +301,18 @@ int handle_request(int sockfd, int from_settings) {
     print_policy_req(&request);
 
     /* Formulate the response: */
-    //XXX: actually do something here!
-    LOGW("phornyac: handle_request: TODO: access policy database to "
-            "handle request; for now, setting response code to "
-            "POLICY_RESP_ALLOW");
-    ret = construct_policy_resp(&response, POLICY_RESP_ALLOW);
+    LOGW("phornyac: handle_request: passing request to switch_on_request()");
+    ret = switch_on_request(&request, from_settings);
+    if (ret < 0) {
+        LOGW("phornyac: handle_request: switch_on_request() returned "
+                "error=%d, returning -1", ret);
+        return -1;
+    }
+    response_code = ret;
+    LOGW("phornyac: handle_request: switch_on_request() returned "
+            "response code %d", response_code);
+
+    ret = construct_policy_resp(&response, response_code);
     if (ret < 0) {
         LOGW("phornyac: handle_request: construct_policy_resp() "
                 "returned error %d, so we're returning -1", ret);
@@ -163,65 +330,6 @@ int handle_request(int sockfd, int from_settings) {
             "returning 0");
     return 0;
 }
-
-#if 0
-/**
- * Handles a connection from an application VM on the
- * given socket fd. First receives the message from the socket,
- * then formulates a response and sends it back. This function
- * assumes that after the sender sends its request here, it will
- * immediately try to receive our response, so we do not do a
- * select() to wait for the other side to be ready for reading.
- * Returns: 0 on success, negative on error. On error, the socket
- *   should be closed.
- */
-int handle_request_app(int sockfd) {
-    int ret, size;
-    policy_req request;
-    policy_resp response;
-    int response_code;
-    LOGW("phornyac: handle_request_app: entered");
-
-    /* First, get the request: */
-    ret = recv_policy_req(sockfd, &request);
-    if (ret < 0) {
-        LOGW("phornyac: handle_request_app: recv_policy_req() returned "
-                "error %d, returning -1", ret);
-        return -1;
-    } else if (ret == 1) {
-        LOGW("phornyac: handle_request_app: recv_policy_req() returned "
-                "1, indicating that other side closed its socket; "
-                "returning -1");
-        return -1;
-    }
-    LOGW("phornyac: handle_request_app: recv_policy_req() succeeded, printing "
-            "request:");
-    print_policy_req(&request);
-
-    /* Formulate the response: */
-    //XXX: actually do something here!
-    LOGW("phornyac: handle_request_app: TODO: access policy database to "
-            "handle request; for now, setting response code to 1");
-    response_code = 1;
-    ret = construct_policy_resp(&response, response_code);
-    if (ret < 0) {
-        LOGW("phornyac: handle_request_app: construct_policy_resp() "
-                "returned error %d, so we're returning -1", ret);
-        return -1;
-    }
-
-    /* Finally, send the response: */
-    ret = send_policy_resp(sockfd, &response);
-    if (ret < 0) {
-        LOGW("phornyac: handle_request_app: send_policy_resp() returned "
-                "error %d, returning -1", ret);
-        return -1;
-    }
-    LOGW("phornyac: handle_request_app: send_policy_resp() succeeded, "
-            "returning 0");
-    return 0;
-}
-#endif
 
 /**
  * Generic function to accept a connection on the given socket.
