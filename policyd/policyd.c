@@ -65,6 +65,20 @@ int initialize_policydb() {
 }
 
 /**
+ * Fills in the designated policy_resp struct with the given fields.
+ * Returns: size of policy_resp on success, negative on error.
+ */
+int construct_policy_resp(policy_resp *msg, int response_code) {
+    LOGW("phornyac: construct_policy_resp: entered");
+
+    msg->response_code = response_code;
+
+    LOGW("phornyac: construct_policy_resp: returning sizeof(policy_resp) "
+            "(%d)", sizeof(policy_resp));
+    return (sizeof(policy_resp));
+}
+
+/**
  * Handles a request from the connection to the Settings application
  * on the given socket fd. First read()s the message from the socket,
  * then write()s a message back.
@@ -99,6 +113,7 @@ int handle_request_app(int sockfd) {
     int ret, size;
     policy_req request;
     policy_resp response;
+    int response_code;
     LOGW("phornyac: handle_request_app: entered");
 
     /* First, get the request: */
@@ -121,7 +136,13 @@ int handle_request_app(int sockfd) {
     //XXX: actually do something here!
     LOGW("phornyac: handle_request_app: TODO: access policy database to "
             "handle request; for now, setting response code to 1");
-    response.response_code = 1;
+    response_code = 1;
+    ret = construct_policy_resp(&response, response_code);
+    if (ret < 0) {
+        LOGW("phornyac: handle_request_app: construct_policy_resp() "
+                "returned error %d, so we're returning -1", ret);
+        return -1;
+    }
 
     /* Finally, send the response: */
     ret = send_policy_resp(sockfd, &response);
