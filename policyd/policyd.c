@@ -78,6 +78,7 @@ int construct_policy_resp(policy_resp *msg, int response_code) {
     return (sizeof(policy_resp));
 }
 
+#if 0
 /**
  * Handles a request from the connection to the Settings application
  * on the given socket fd. First read()s the message from the socket,
@@ -98,7 +99,72 @@ int handle_request_settings(int sockfd) {
         "RETURNING 0");
     return 0;
 }
+#endif
 
+/**
+ * Handles a connection from an application VM or from the Settings
+ * app on the given socket fd. First receives the message from the
+ * socket, then formulates a response and sends it back. This
+ * function assumes that after the sender sends its request here,
+ * it will immediately try to receive our response, so we do not
+ * do a select() to wait for the other side to be ready for reading.
+ * Update requests will fail if from_settings is not set.
+ * Returns: 0 on success, negative on error. On error, the socket
+ *   should be closed.
+ */
+int handle_request(int sockfd, int from_settings) {
+    int ret, size;
+    policy_req request;
+    policy_resp response;
+    LOGW("phornyac: handle_request: entered");
+
+    if (from_settings) {
+        LOGW("phornyac: handle_request: from_settings is set, but "
+                "not implemented yet!!!");
+        return -1;
+    }
+
+    /* First, get the request: */
+    ret = recv_policy_req(sockfd, &request);
+    if (ret < 0) {
+        LOGW("phornyac: handle_request: recv_policy_req() returned "
+                "error %d, returning -1", ret);
+        return -1;
+    } else if (ret == 1) {
+        LOGW("phornyac: handle_request: recv_policy_req() returned "
+                "1, indicating that other side closed its socket; "
+                "returning -1");
+        return -1;
+    }
+    LOGW("phornyac: handle_request: recv_policy_req() succeeded, printing "
+            "request:");
+    print_policy_req(&request);
+
+    /* Formulate the response: */
+    //XXX: actually do something here!
+    LOGW("phornyac: handle_request: TODO: access policy database to "
+            "handle request; for now, setting response code to "
+            "POLICY_RESP_ALLOW");
+    ret = construct_policy_resp(&response, POLICY_RESP_ALLOW);
+    if (ret < 0) {
+        LOGW("phornyac: handle_request: construct_policy_resp() "
+                "returned error %d, so we're returning -1", ret);
+        return -1;
+    }
+
+    /* Finally, send the response: */
+    ret = send_policy_resp(sockfd, &response);
+    if (ret < 0) {
+        LOGW("phornyac: handle_request: send_policy_resp() returned "
+                "error %d, returning -1", ret);
+        return -1;
+    }
+    LOGW("phornyac: handle_request: send_policy_resp() succeeded, "
+            "returning 0");
+    return 0;
+}
+
+#if 0
 /**
  * Handles a connection from an application VM on the
  * given socket fd. First receives the message from the socket,
@@ -155,6 +221,7 @@ int handle_request_app(int sockfd) {
             "returning 0");
     return 0;
 }
+#endif
 
 /**
  * Generic function to accept a connection on the given socket.
@@ -303,6 +370,7 @@ int accept_loop(int sockfd_settings, int sockfd_app) {
     int i, ret, err_count;
     int nfds;
     int accepted_settings_fd = -1;
+    int from_settings = 0;
     fd_set rd_set, wr_set, er_set;
     fd_set rd_ret, wr_ret, er_ret;
     struct timeval timeout;
@@ -426,25 +494,34 @@ int accept_loop(int sockfd_settings, int sockfd_app) {
                             "fd %d, adding to rd_set", ret);
                     FD_SET(ret, &rd_set);
                     nfds = max(nfds, ret);
-                } else if (i == accepted_settings_fd) {
-                    /* Existing connection from Settings */
-                    LOGW("phornyac: accept_loop: existing connection from "
-                            "Settings");
+                } else {
+                    /* Check if the request is from the settings app: */
+                    if (i == accepted_settings_fd) {
+                        LOGW("phornyac: accept_loop: existing connection from "
+                                "Settings");
+                        from_settings = 1;
+                    } else {
+                        LOGW("phornyac: accept_loop: existing connection from "
+                                "app");
+                        from_settings = 0;
+                    }
                     /* Handle the request: */
-                    ret = handle_request_settings(i);
+                    ret = handle_request(i, from_settings);
                     if (ret < 0) {
-                        LOGW("phornyac: accept_loop: handle_request_settings() "
+                        LOGW("phornyac: accept_loop: handle_request() "
                                 "returned error %d, closing its fd %d",
                                 ret, i);
                         close(i);
+                        if (from_settings)
+                            accepted_settings_fd = -1;
                         FD_CLR(i, &rd_set);
                         err_count++;
                     }
-                    LOGW("phornyac: accept_loop: handle_request_settings() "
+                    LOGW("phornyac: accept_loop: handle_request() "
                             "returned ok");
-                } else {  /* Existing connection from app */
-                    LOGW("phornyac: accept_loop: existing connection from "
-                            "app");
+                }
+                #if 0
+                else {  /* Existing connection from app */
                     /* Handle the request: */
                     ret = handle_request_app(i);
                     if (ret < 0) {
@@ -458,6 +535,7 @@ int accept_loop(int sockfd_settings, int sockfd_app) {
                     LOGW("phornyac: accept_loop: handle_request_app() "
                             "returned ok");
                 }
+                #endif
             } else if (FD_ISSET(i, &wr_ret)) {
                 LOGW("phornyac: accept_loop: fd %d is ready for writing? "
                         "...doing nothing", i);

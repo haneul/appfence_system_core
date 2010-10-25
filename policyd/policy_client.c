@@ -31,8 +31,9 @@
  * Fills in the designated policy_req struct with the given fields.
  * Returns: size of policy_req on success, negative on error.
  */
-int construct_policy_req(policy_req *msg, const char *process_name,
-                const char *dest_name, int taint_tag) {
+int construct_policy_req(policy_req *msg, int request_code,
+        const char *process_name, const char *dest_name,
+        int taint_tag) {
     LOGW("phornyac: construct_policy_req: entered");
     if (strlen(process_name) >= POLICYD_STRING_SIZE) {
         LOGW("phornyac: construct_policy_req: processName too long, "
@@ -46,13 +47,13 @@ int construct_policy_req(policy_req *msg, const char *process_name,
     }
 
     /* Some of these fields are currently unused */
-    msg->request_code = -1;
-    strncpy(msg->process_name, process_name, POLICYD_STRING_SIZE-1);
-    msg->process_name[POLICYD_STRING_SIZE-1] = '\0';
-    strncpy(msg->dest_name, dest_name, POLICYD_STRING_SIZE-1);
-    msg->dest_name[POLICYD_STRING_SIZE-1] = '\0';
-    msg->taint_tag = taint_tag;
-    msg->app_status = -1;
+    msg->request_code = request_code;
+    strncpy(msg->entry.process_name, process_name, POLICYD_STRING_SIZE-1);
+    msg->entry.process_name[POLICYD_STRING_SIZE-1] = '\0';
+    strncpy(msg->entry.dest_name, dest_name, POLICYD_STRING_SIZE-1);
+    msg->entry.dest_name[POLICYD_STRING_SIZE-1] = '\0';
+    msg->entry.taint_tag = taint_tag;
+    msg->entry.app_status = -1;
 
     LOGW("phornyac: construct_policy_req: returning sizeof(policy_req) "
             "(%d)", sizeof(policy_req));

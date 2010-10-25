@@ -28,36 +28,59 @@
 #define POLICYD_SOCKTYPE     SOCK_STREAM  /* alternative: SOCK_DGRAM */
 #define POLICYD_STRING_SIZE  128
 
-typedef struct policy_request {
-    int request_code;  /* currently unused */
+/**
+ * Policy request and response codes. UPDATE codes are only for use
+ * by the "Settings" app that has permission to access policyd's
+ * update socket (see system/core/rootdir/init.rc).
+ */
+enum {
+    POLICY_BASE = 0,
+    POLICY_REQ_QUERY,         //Query the db for this transmission
+    POLICY_UPDATE_ENABLE,     //Globally enable policy enforcement
+    POLICY_UPDATE_DISABLE,    //Globally disable policy enforcement
+    POLICY_UPDATE_DEF_ALLOW,  //Change enforcement to default-allow
+    POLICY_UPDATE_DEF_DENY,   //Change enforcement to default-deny
+    POLICY_UPDATE_ADD,        //Add entry to policy db
+    POLICY_UPDATE_DEL,        //Remove all matching entries from policy db
+    POLICY_RESP_ALLOW,        //Allow this transmission to proceed
+    POLICY_RESP_BLOCK,        //Block this transmission
+    POLICY_RESP_SUCCESS,      //Db update succeeded
+};
+
+/**
+ * This struct should correspond exactly to the rows that are
+ * stored in the policydb sqlite database:
+ */
+typedef struct _policy_entry {
     char process_name[POLICYD_STRING_SIZE];
     char dest_name[POLICYD_STRING_SIZE];
     int taint_tag;
     int app_status;  /* currently unused */
+} policy_entry;
+
+typedef struct _policy_req {
+    int request_code;
+    policy_entry entry;
 } policy_req;
 
-/**
- * Policy decision response codes:
- * 0: don't allow this transmission
- * 1: allow this transmission
- * ...
- */
-//XXX: create some kind of enum here??
-
-typedef struct policy_response {
+typedef struct _policy_resp {
     int response_code;
 } policy_resp;
 
-/* For use by Settings app: */
+#if 0
+/**
+ * For use by Settings app;
+ */
 typedef struct policy_update_request {
-    int something;
-    /* Should just contain a SQL query? */
+    int request_code;
+    policy_entry entry;
 } policy_update_req;
 
 /* For use by Settings app: */
 typedef struct policy_update_response {
     int response_code;
 } policy_update_resp;
+#endif
 
 /**
  * Sends a policy_req struct to the given socket. The send will
