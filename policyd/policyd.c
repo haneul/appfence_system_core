@@ -17,26 +17,26 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
-#include <poll.h>
 #include <sys/select.h>
 #include <sys/time.h>
 #include <sys/types.h>
-#include <unistd.h>
 #include <errno.h>
 #include <utils/Log.h>
 #include <cutils/sockets.h>
-#include <cutils/policyd.h>
+#include <policy_global.h>
+#include <policydb.h>
 
 #ifdef LOG_TAG
 #undef LOG_TAG
 #define LOG_TAG "policyd"
 #endif
 
-#define POLL_NFDS 2        /* Number of fds we need to poll/select on */
-#define POLL_TIMEOUT -1    /* Negative means infinite timeout */
-#define BACKLOG 12         /* No idea if this is appropriate... */
-#define MAX_ERRORS 100     /* Maximum number of errors before we exit */
+//#define POLL_NFDS 2        /* Number of fds we need to poll/select on */
+//#define POLL_TIMEOUT -1    /* Negative means infinite timeout */
+#define BACKLOG 12           /* No idea if this is appropriate... */
+#define MAX_ERRORS 100       /* Maximum number of errors before we exit */
 #define SECONDS 20
+#define RESPONSE_TIMEOUT 5   /* Seconds that we wait for app to read() our reply */
 #undef DELAY_START
 
 void fatal(const char *msg) {
@@ -73,78 +73,65 @@ int initialize_policydb() {
 int handle_request_settings(int sockfd) {
     int ret;
     int msg_size;
-    policyd_msg msg_send;
+    policy_req msg_send;
 
     LOGW("phornyac: handle_request_settings: entered");
 
     //XXX: this gets called when the socket is ready for READING;
     //  need to update it to read() first, then write()!
 
-    /* Construct the message: */
-    strncpy(msg_send.msg, "Test message from server to Settings app",
-            POLICYD_MSG_SIZE);
-
-    msg_size = sizeof(msg_send);
-    LOGW("phornyac: handle_request_settings: calling write(%d) with msg=%s, "
-            "msg_size=%d", sockfd, msg_send.msg, msg_size);
-    ret = write(sockfd, &msg_send, msg_size);
-    if (ret < 0) {
-        LOGW("phornyac: handle_request_settings: error number: %d", errno);
-        LOGW("phornyac: handle_request_settings: write() returned error, "
-                "returning -1");
-        return -1;
-    }
-    if (ret != msg_size) {
-        LOGW("phornyac: handle_request_settings: error number: %d", errno);
-        LOGW("phornyac: handle_request_settings: write() returned %d < %d, "
-                "returning -2", ret, msg_size);
-        return -2;
-    }
-    LOGW("phornyac: handle_request_settings: write() returned success");
-
-    LOGW("phornyac: handle_request_settings: returning 0");
+    LOGW("phornyac: handle_request_settings: NEEDS RE-IMPLEMENTING, "
+        "RETURNING 0");
     return 0;
 }
 
 /**
  * Handles a connection from an application VM on the
- * given socket fd. First read()s the message from the socket,
- * then write()s a message back.
- * Returns: 0 on success, negative on error.
+ * given socket fd. First receives the message from the socket,
+ * then formulates a response and sends it back. This function
+ * assumes that after the sender sends its request here, it will
+ * immediately try to receive our response, so we do not do a
+ * select() to wait for the other side to be ready for reading.
+ * Returns: 0 on success, negative on error. On error, the socket
+ *   should be closed.
  */
 int handle_request_app(int sockfd) {
-    LOGW("phornyac: handle_request_app: entered\n");
-    int ret;
-    int msg_size;
-    policyd_msg msg_send;
+    int ret, size;
+    policy_req request;
+    policy_resp response;
+    LOGW("phornyac: handle_request_app: entered");
 
-    //XXX: this gets called when the socket is ready for READING;
-    //  need to update it to read() first, then write()!
-
-    /* Construct the message: */
-    strncpy(msg_send.msg, "Test message from server to client app",
-            POLICYD_MSG_SIZE);
-
-    msg_size = sizeof(msg_send);
-    LOGW("phornyac: handle_request_app: calling write(%d) with msg=%s, "
-            "msg_size=%d", sockfd, msg_send.msg, msg_size);
-    ret = write(sockfd, &msg_send, msg_size);
+    /* First, get the request: */
+    ret = recv_policy_req(sockfd, &request);
     if (ret < 0) {
-        LOGW("phornyac: handle_request_app: error number: %d (EPIPE=%d)",
-                errno, EPIPE);
-        LOGW("phornyac: handle_request_app: write() returned error, "
+        LOGW("phornyac: handle_request_app: recv_policy_req() returned "
+                "error %d, returning -1", ret);
+        return -1;
+    } else if (ret == 1) {
+        LOGW("phornyac: handle_request_app: recv_policy_req() returned "
+                "1, indicating that other side closed its socket; "
                 "returning -1");
         return -1;
     }
-    if (ret != msg_size) {
-        LOGW("phornyac: handle_request_app: error number: %d", errno);
-        LOGW("phornyac: handle_request_app: write() returned %d < %d, "
-                "returning -2", ret, msg_size);
-        return -2;
-    }
-    LOGW("phornyac: handle_request_app: write() returned success");
+    LOGW("phornyac: handle_request_app: recv_policy_req() succeeded, printing "
+            "request:");
+    print_policy_req(&request);
 
-    LOGW("phornyac: handle_request_app: returning 0");
+    /* Formulate the response: */
+    //XXX: actually do something here!
+    LOGW("phornyac: handle_request_app: TODO: access policy database to "
+            "handle request; for now, setting response code to 1");
+    response.response_code = 1;
+
+    /* Finally, send the response: */
+    ret = send_policy_resp(sockfd, &response);
+    if (ret < 0) {
+        LOGW("phornyac: handle_request_app: send_policy_resp() returned "
+                "error %d, returning -1", ret);
+        return -1;
+    }
+    LOGW("phornyac: handle_request_app: send_policy_resp() succeeded, "
+            "returning 0");
     return 0;
 }
 
@@ -241,29 +228,6 @@ int accept_settings(int sockfd) {
     LOGW("phornyac: accept_settings: returning accepted_fd=%d",
             accepted_fd);
     return accepted_fd;
-
-#if 0
-    //TODO: unreachable code!!!
-    /* Handle the accepted connection: */
-    ret = handle_request_settings(accepted_fd);
-    if (ret) {
-        LOGW("phornyac: accept_settings: handle_request_settings() "
-                "returned %d, so closing accepted_fd %d and "
-                "returning -1", accepted_fd, ret);
-        close(accepted_fd);
-        return -1;
-    }
-    LOGW("phornyac: accept_settings: handle_request_settings() "
-            "returned ok");
-
-    /* Cleanup: */
-    LOGW("phornyac: accept_settings: closing socket "
-            "connection %d", accepted_fd);
-    close(accepted_fd);
-
-    LOGW("phornyac: accept_settings: returning 0");
-    return 0;
-#endif
 }
 
 /**
@@ -306,29 +270,6 @@ int accept_app(int sockfd) {
     LOGW("phornyac: accept_app: returning accepted_fd=%d",
             accepted_fd);
     return accepted_fd;
-
-#if 0
-    //TODO: unreachable code!!!
-    /* Handle the accepted connection: */
-    ret = handle_request_app(accepted_fd);
-    if (ret) {
-        LOGW("phornyac: accept_app: handle_request_app() "
-                "returned %d, so closing accepted_fd %d and "
-                "returning -1", accepted_fd, ret);
-        close(accepted_fd);
-        return -1;
-    }
-    LOGW("phornyac: accept_app: handle_request_app() "
-            "returned ok");
-
-    /* Cleanup: */
-    LOGW("phornyac: accept_app: closing socket "
-            "connection %d", accepted_fd);
-    close(accepted_fd);
-
-    LOGW("phornyac: accept_app: returning 0");
-    return 0;
-#endif
 }
 
 /**
@@ -399,19 +340,12 @@ int accept_loop(int sockfd_settings, int sockfd_app) {
         rd_ret = rd_set;
         wr_ret = wr_set;
         er_ret = er_set;
-        ///* timeout value must be updated before every call: */
-        //timeout.tv_sec = 1;   /* seconds */
-        //timeout.tv_usec = 0;  /* microseconds */
         LOGW("phornyac: accept_loop: sockfd_settings=%d, "
                 "sockfd_app=%d, accepted_settings_fd=%d",
                 sockfd_settings, sockfd_app, accepted_settings_fd);
         LOGW("phornyac: accept_loop: calling select() with nfds=%d and "
                 "NULL timeout", nfds);
         ret = select(nfds + 1, &rd_ret, &wr_ret, &er_ret, NULL);
-        ////XXX: shouldn't need to use a timeout!!!
-        //LOGW("phornyac: accept_loop: calling select() with nfds=%d and "
-        //        "non-NULL timeout", nfds);
-        //ret = select(nfds + 1, &rd_ret, &wr_ret, &er_ret, &timeout);
         if (ret < 0) {
             LOGW("phornyac: accept_loop: error number %d (EINTR is %d)",
                     errno, EINTR);
@@ -477,7 +411,7 @@ int accept_loop(int sockfd_settings, int sockfd_app) {
                             "Settings");
                     /* Handle the request: */
                     ret = handle_request_settings(i);
-                    if (ret) {
+                    if (ret < 0) {
                         LOGW("phornyac: accept_loop: handle_request_settings() "
                                 "returned error %d, closing its fd %d",
                                 ret, i);
@@ -492,7 +426,7 @@ int accept_loop(int sockfd_settings, int sockfd_app) {
                             "app");
                     /* Handle the request: */
                     ret = handle_request_app(i);
-                    if (ret) {
+                    if (ret < 0) {
                         LOGW("phornyac: accept_loop: handle_request_app() "
                                 "returned error %d, closing its fd %d",
                                 ret, i);
@@ -503,13 +437,15 @@ int accept_loop(int sockfd_settings, int sockfd_app) {
                     LOGW("phornyac: accept_loop: handle_request_app() "
                             "returned ok");
                 }
+            } else if (FD_ISSET(i, &wr_ret)) {
+                LOGW("phornyac: accept_loop: fd %d is ready for writing? "
+                        "...doing nothing", i);
+            } else if (FD_ISSET(i, &er_ret)) {
+                LOGW("phornyac: accept_loop: fd %d has exception? "
+                        "...doing nothing", i);
             } else {
-                /* Nothing ready for reading on this fd */
-                LOGW("phornyac: accept_loop: nothing to do for fd %d",
-                        i);
+                LOGW("phornyac: accept_loop: nothing to do for fd %d", i);
             }
-            //TODO: check wr_ret?
-            //TODO: check er_ret?
             //TODO: when do we close fds???
         } //for()
 
@@ -521,131 +457,6 @@ int accept_loop(int sockfd_settings, int sockfd_app) {
     LOGW("phornyac: accept_loop: finished (why?), returning 0");
     return 0;
 }
-
-#if 0
-/**
- * Main loop for policy daemon server: accepts connections on given
- * socket fds, and ...
- * XXX: this is the original implementation, using poll()...
- *
- * Returns: 0 on success, -1 on error.
- */
-int accept_loop_poll(int sockfd_settings, int sockfd_app) {
-    int i, ret, err_count;
-    nfds_t poll_nfds;
-    int poll_timeout;
-    struct pollfd poll_fds[POLL_NFDS];
-
-    LOGW("phornyac: accept_loop: entered");
-    LOGW("phornyac: accept_loop: sockfd_settings=%d, sockfd_app=%d",
-            sockfd_settings, sockfd_app);
-    err_count = 0;
-    
-    /**
-     * Set up the data structures for poll/select. We only care about
-     * being able to accept (read) on our socket fds, so set events to
-     * just POLLIN.
-     *
-     * In order to be notified of incoming connections on a socket, you can use
-     * select(2) or poll(2).   A  _readable_  event
-     * will  be  delivered when a new connection is attempted and you may
-     * then call accept() to get a socket for that con‐
-     * nection.  Alternatively, you can set the socket to deliver
-     * SIGIO when activity occurs on a  socket;  see  socket(7)
-     * for details.
-     */
-    poll_nfds = POLL_NFDS;
-    poll_timeout = POLL_TIMEOUT;
-    poll_fds[0].fd = sockfd_settings;
-    poll_fds[1].fd = sockfd_app;
-    poll_fds[0].events = POLLIN;
-    poll_fds[1].events = POLLIN;
-    if (1+1 != POLL_NFDS) {
-        LOGE("phornyac: accept_loop: should have %d poll_fds, returning -1",
-                POLL_NFDS);
-        return -1;
-    }
-
-    /**
-     * Loop, accepting socket connections as they occur...
-     */
-    while (1) {
-        if (err_count >= MAX_ERRORS) {
-            LOGW("phornyac: accept_loop: reached max number of errors (%d), "
-                    "returning -1", err_count);
-            return -1;
-        }
-
-        /* Poll on the fds we're waiting for connections from: */
-        ret = poll((struct pollfd *)poll_fds, poll_nfds, poll_timeout);
-        if (ret < 0) {
-            LOGW("phornyac: accept_loop: error number: %d", errno);
-            LOGW("phornyac: accept_loop: poll() returned %d, "
-                    "looping again", ret);
-            err_count++;
-            continue;
-        }
-        else if (ret == 0) {
-            LOGW("phornyac: accept_loop: poll() timed out... re-looping");
-            err_count++;
-            continue;
-        }
-        LOGW("phornyac: accept_loop: poll() returned %d fds ready to read",
-                ret);
-
-        /**
-         * Handle the fds that are ready to be read:
-         */
-        for (i = 0; i < POLL_NFDS; i++) {
-            if (poll_fds[i].revents & (POLLERR | POLLHUP | POLLNVAL)) {
-                LOGW("phornyac: accept_loop: poll_fds[%d] has error 0x%X "
-                        "(POLLERR=0x%X, POLLHUP=0x%X, POLLNVAL=0x%X), "
-                        "continuing",
-                        i, poll_fds[i].revents,
-                        POLLERR, POLLHUP, POLLNVAL);
-                err_count++;
-                continue;
-            } else if (poll_fds[i].revents & POLLIN) {
-                LOGW("phornyac: accept_loop: poll_fds[%d] has event POLLIN",
-                        i);
-                switch(i) {
-                case 0:  /* listening socket: sockfd_settings */
-                    ret = accept_settings(sockfd_settings);
-                    if (ret < 0) {
-                        LOGW("phornyac: accept_loop: accept_settings() "
-                                "returned error %d, doing nothing",
-                                ret);
-                        err_count++;
-                    }
-                    break;
-                case 1:  /* listening socket: sockfd_app */
-                    ret = accept_app(sockfd_app);
-                    if (ret < 0) {
-                        LOGW("phornyac: accept_loop: accept_app() "
-                                "returned error %d, doing nothing",
-                                ret);
-                        err_count++;
-                    }
-                    break;
-                default: /* already-connected socket */
-                    LOGW("phornyac: accept_loop: got poll event on "
-                            "already-connected socket");
-                    err_count++;
-                }
-            } else {
-                /**
-                 * poll() didn't get a POLLIN or an error for this fd,
-                 * so do nothing.
-                 */
-                LOGW("phornyac: accept_loop: nothing to do for poll_fds[%d]",
-                        i);
-            }
-        }
-        LOGW("phornyac: accept_loop: reached end of while loop, err_count=%d",
-                err_count);
-    }
-}
-#endif
 
 int main(int argc, char* argv[]) {
     int i, ret;
