@@ -33,9 +33,8 @@
 
 #define BACKLOG 12           /* No idea if this is appropriate... */
 #define MAX_ERRORS 100       /* Maximum number of errors before we exit */
-#define SECONDS 20
+#define SECONDS 30
 #define RESPONSE_TIMEOUT 5   /* Seconds that we wait for app to read() our reply */
-#undef DELAY_START
 
 /**
  * Extremely important global variables:
@@ -65,13 +64,23 @@ void usage() {
 }
 
 /**
- * Initializes the policy database: ...
+ * Initializes the policy database by calling the policydb component's
+ * init function.
  * Returns: 0 on success, negative on error.
  */
-int initialize_policydb() {
-    LOGW("phornyac: initialize_policydb(): entered\n");
+int init_db() {
+    LOGW("phornyac: init_db(): entered");
+    int ret;
 
-    LOGW("phornyac: initialize_policydb(): returning 0\n");
+    LOGW("phornyac: init_db(): calling initialize_policydb()");
+    ret = initialize_policydb();
+    if (ret < 0) {
+        LOGW("phornyac: init_db(): initialize_policydb() returned "
+                "error=%d, returning -1", ret);
+        return -1;
+    }
+
+    LOGW("phornyac: init_db(): returning 0");
     return 0;
 }
 
@@ -665,6 +674,9 @@ int accept_loop(int sockfd_settings, int sockfd_app) {
     return 0;
 }
 
+//#undef DELAY_START
+#define DELAY_START
+
 int main(int argc, char* argv[]) {
     int i, ret;
     int sockfd_settings, sockfd_app;
@@ -688,9 +700,9 @@ int main(int argc, char* argv[]) {
 #endif
 
     /* Initialize the policy database: */
-    ret = initialize_policydb();
+    ret = init_db();
     if (ret) {
-        LOGW("phornyac: main: initialize_policydb() returned %d, returning -1",
+        LOGW("phornyac: main: init_db() returned %d, returning -1",
                 ret);
         return -1;
     }
