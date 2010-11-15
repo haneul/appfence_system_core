@@ -33,7 +33,7 @@
 
 #define BACKLOG 12           /* No idea if this is appropriate... */
 #define MAX_ERRORS 100       /* Maximum number of errors before we exit */
-#define SECONDS 30
+#define SECONDS 20
 #define RESPONSE_TIMEOUT 5   /* Seconds that we wait for app to read() our reply */
 
 /**
