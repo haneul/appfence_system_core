@@ -637,23 +637,7 @@ int accept_loop(int sockfd_settings, int sockfd_app) {
                     LOGW("phornyac: accept_loop: handle_request() "
                             "returned ok");
                 }
-                #if 0
-                else {  /* Existing connection from app */
-                    /* Handle the request: */
-                    ret = handle_request_app(i);
-                    if (ret < 0) {
-                        LOGW("phornyac: accept_loop: handle_request_app() "
-                                "returned error %d, closing its fd %d",
-                                ret, i);
-                        close(i);
-                        FD_CLR(i, &rd_set);
-                        err_count++;
-                    }
-                    LOGW("phornyac: accept_loop: handle_request_app() "
-                            "returned ok");
-                }
-                #endif
-            } else if (FD_ISSET(i, &wr_ret)) {
+           } else if (FD_ISSET(i, &wr_ret)) {
                 LOGW("phornyac: accept_loop: fd %d is ready for writing? "
                         "...doing nothing", i);
             } else if (FD_ISSET(i, &er_ret)) {
