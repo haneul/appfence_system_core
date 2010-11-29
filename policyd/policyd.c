@@ -20,6 +20,7 @@
 #include <sys/select.h>
 #include <sys/time.h>
 #include <sys/types.h>
+#include <sys/inotify.h>
 #include <errno.h>
 #include <utils/Log.h>
 #include <cutils/sockets.h>
@@ -81,6 +82,113 @@ int init_db() {
     }
 
     LOGW("phornyac: init_db(): returning 0");
+    return 0;
+}
+
+/**
+ * Adds a watch to an inotify instance for our policy XML file. The
+ * fd passed into this function represents an existing inotify
+ * instance; if the argument is negative, then this function will
+ * create a new inotify instance first.
+ * Returns: the file descriptor for the inotify instance, or
+ *   -1 on error.
+ */
+int inotify_setup(int inotify_fd) {
+    int fd, ret;
+    uint32_t mask;
+    LOGW("phornyac: inotify_setup: entered, arg inotify_fd=%d",
+            inotify_fd);
+
+    if (inotify_fd > 0) {
+        fd = inotify_fd;
+    } else {
+        fd = inotify_init();
+        if (fd < 0) {
+            LOGW("phornyac: inotify_setup: inotify_init() returned "
+                    "error=%d, returning -1", errno);
+            return -1;
+        }
+    }
+
+    /* When adb push is used to overwrite the policy XML file, inotify
+     * reports it as a IN_DELETE_SELF event. We just watch for all
+     * events on this file to make sure that we don't miss anything.
+     * inotify_add_watch() returns a "watch descriptor" that uniquely
+     * identifies this particular watch when read() is called on the
+     * inotify event queue fd. Since we're only interested in watching
+     * one file for now, we don't do anything with the watch descriptor.
+     */
+    LOGW("phornyac: inotify_setup: adding watch for "
+            "policydb_xmlfile=%s", policydb_xmlfile);
+    mask = IN_ALL_EVENTS;
+    ret = inotify_add_watch(fd, policydb_xmlfile, mask);
+    if (ret < 0) {
+        LOGW("phornyac: inotify_setup: inotify_add_watch() returned "
+                "error=%d, returning -1", errno);
+        return -1;
+    }
+    LOGW("phornyac: inotify_setup: inotify_add_watch() returned "
+            "watch descriptor %d", ret);
+
+    LOGW("phornyac: inotify_setup: setup successful, returning "
+            "inotify fd=%d", fd);
+    return fd;
+}
+
+/**
+ * Handles an inotify event on the given fd. When this function returns
+ * an error, the inotify_fd passed to it should be closed and re-opened
+ * (see comments below for more details).
+ * Returns: 0 on success, -1 on error.
+ */
+int handle_inotify_event(int inotify_fd) {
+    int ret, bufsize;
+    struct inotify_event event;
+    LOGW("phornyac: handle_inotify_event: entered");
+
+    /* Read the inotify event: */
+    bufsize = sizeof(struct inotify_event);
+    ret = read(inotify_fd, &event, bufsize);
+    if (ret != bufsize) {
+        if (ret < 0) {
+            LOGW("phornyac: handle_inotify_event: read() returned "
+                    "error=%d, returning -1", errno);
+            return -1;
+        } else {
+            LOGW("phornyac: handle_inotify_event: read() expected "
+                    "%d bytes, but only got %d; should read() again, "
+                    "but being lazy and just returning -1",
+                    bufsize, ret);
+            return -1;
+        }
+    }
+
+    /* When a new policy file is pushed onto the device using adb push,
+     * it doesn't count as an IN_MODIFY event; instead, it appears that
+     * the file is deleted and then written again. Therefore, inotify
+     * generates an IN_DELETE_SELF event; I've also seen IN_IGNORED and
+     * IN_ATTRIB events here. Therefore, after we receive ANY inotify event
+     * here, we always refresh the database, and then we tell the
+     * caller that the inotify_fd is not invalid (since the inode was
+     * replaced) unless we really did see an IN_MODIFY event.
+     */
+    LOGW("phornyac: handle_inotify_event: successfully read inotify_event: "
+            "wd=%d, mask=0x%X", event.wd, event.mask);
+    LOGW("phornyac: handle_inotify_event: calling refresh_policydb()");
+    ret = refresh_policydb();
+    if (ret < 0) {
+        LOGW("phornyac: handle_inotify_event: refresh_policydb() "
+                "returned error=%d, returning -1", ret);
+        return -1;
+    }
+
+    if (!(event.mask & IN_MODIFY)) {
+        LOGW("phornyac: handle_inotify_event: event mask does not contain "
+                "IN_MODIFY, returning -1");
+        return -1;
+    }
+    LOGW("phornyac: handle_inotify_event: event mask contained IN_MODIFY, "
+            "returning 0");
     return 0;
 }
 
@@ -483,7 +591,7 @@ int accept_app(int sockfd) {
  *
  * Returns: 0 on success, -1 on error.
  */
-int accept_loop(int sockfd_settings, int sockfd_app) {
+int accept_loop(int inotify_fd, int sockfd_settings, int sockfd_app) {
     int i, ret, err_count;
     int nfds;
     int accepted_settings_fd = -1;
@@ -518,9 +626,11 @@ int accept_loop(int sockfd_settings, int sockfd_app) {
     FD_ZERO(&wr_ret);
     FD_ZERO(&er_set);
     FD_ZERO(&er_ret);
+    FD_SET(inotify_fd, &rd_set);
     FD_SET(sockfd_settings, &rd_set);
     FD_SET(sockfd_app, &rd_set);
-    nfds = max(sockfd_settings, sockfd_app);
+    nfds = max(inotify_fd, sockfd_settings);
+    nfds = max(nfds, sockfd_app);
       /* "an integer one more than the maximum of any file descriptor
        *  in any of the sets"; we'll add the 1 later. */
 
@@ -580,7 +690,26 @@ int accept_loop(int sockfd_settings, int sockfd_app) {
             if (FD_ISSET(i, &rd_ret)) {
                 LOGW("phornyac: accept_loop: fd %d is ready for reading",
                         i);
-                if (i == sockfd_settings) {  /* New connection from Settings */
+                if (i == inotify_fd) {  /* policydb XML file has changed */
+                    LOGW("phornyac: accept_loop: inotify_fd ready for "
+                            "reading, policydb XML file has changed");
+                    LOGW("phornyac: accept_loop: calling "
+                            "handle_inotify_event()");
+                    ret = handle_inotify_event(i);
+                    if (ret < 0) {
+                        LOGW("phornyac: accept_loop: handle_inotify_event() "
+                                "returned error %d, so closing inotify_fd "
+                                "and calling inotify_setup(-1) again", ret);
+                        close(inotify_fd);
+                        inotify_fd = inotify_setup(-1);
+                        nfds = max(nfds, inotify_fd);
+                        if (ret < 0) {
+                            LOGW("phornyac: accept_loop: "
+                                    "inotify_setup() returned error=%d, "
+                                    "ignoring", ret);
+                        }
+                    }
+                } else if (i == sockfd_settings) {  /* New connection from Settings */
                     LOGW("phornyac: accept_loop: new connection from Settings");
                     /* Accept connection:*/
                     ret = accept_settings(sockfd_settings);
@@ -663,11 +792,12 @@ int accept_loop(int sockfd_settings, int sockfd_app) {
 
 int main(int argc, char* argv[]) {
     int i, ret;
+    int inotify_fd;
     int sockfd_settings, sockfd_app;
 
     LOGW("phornyac: main: entered, argc=%d\n", argc);
 #ifdef DELAY_START
-    LOGW("phornyac: main: sleeping for %d secs to wait for logging to start\n",
+    LOGW("phornyac: main: sleeping for %d secs to delay start\n",
             SECONDS);
     sleep(SECONDS);
     for (i = 0; i < argc; i++) {
@@ -687,6 +817,15 @@ int main(int argc, char* argv[]) {
     ret = init_db();
     if (ret) {
         LOGW("phornyac: main: init_db() returned %d, returning -1",
+                ret);
+        return -1;
+    }
+
+    /* Setup inotify so that we can refresh the db whenever the policy
+     * file is changed: */
+    inotify_fd = inotify_setup(-1);
+    if (inotify_fd < 0) {
+        LOGW("phornyac: main: inotify_setup() returned %d, returning -1",
                 ret);
         return -1;
     }
@@ -727,7 +866,7 @@ int main(int argc, char* argv[]) {
         return -1;
     }
     
-    ret = accept_loop(sockfd_settings, sockfd_app);
+    ret = accept_loop(inotify_fd, sockfd_settings, sockfd_app);
     if (ret < 0) {
         LOGW("phornyac: main: accept_loop returned error %d, returning -1",
                 ret);
