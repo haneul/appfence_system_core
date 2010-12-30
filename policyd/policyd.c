@@ -324,8 +324,9 @@ int switch_on_request(policy_req *request, int from_settings) {
     case POLICY_REQ_QUERY:
         LOGW("phornyac: switch_on_request: case POLICY_REQ_QUERY");
         if (from_settings) {
-            LOGW("phornyac: switch_on_request: from_settings is true, "
-                    "is this really what we want??");
+            LOGW("phornyac: switch_on_request: from_settings is true "
+                    "for case POLICY_REQ_QUERY, is this really what we "
+                    "want??");
         }
         return handle_query(&(request->entry));
     case POLICY_UPDATE_ENABLE:
