@@ -31,12 +31,12 @@
 int send_policy_req(int sockfd, policy_req *msg) {
     int size, flags, ret;
 
-    LOGW("phornyac: send_policy_req: entered");
+    //LOGW("phornyac: send_policy_req: entered");
 
     size = sizeof(*msg);
     flags = 0;  /* See send(2) */
-    LOGW("phornyac: send_policy_req: calling send() of size %d to fd %d "
-            "with flags=0x%X", size, sockfd, flags);
+    //LOGW("phornyac: send_policy_req: calling send() of size %d to fd %d "
+    //        "with flags=0x%X", size, sockfd, flags);
     ret = send(sockfd, msg, size, flags);
     if (ret < 0) {
         LOGW("phornyac: send_policy_req: error number: %d (EPIPE=%d)",
@@ -52,20 +52,20 @@ int send_policy_req(int sockfd, policy_req *msg) {
         LOGW("phornyac: send_policy_req: returning -1");
         return -1;
     }
-    LOGW("phornyac: send_policy_req: send() returned success, "
-            "returning 0");
+    //LOGW("phornyac: send_policy_req: send() returned success, "
+    //        "returning 0");
     return 0;
 }
 
 int recv_policy_req(int sockfd, policy_req *msg) {
     int size, flags, ret;
 
-    LOGW("phornyac: recv_policy_req: entered");
+    //LOGW("phornyac: recv_policy_req: entered");
 
     size = sizeof(*msg);
     flags = MSG_WAITALL;  /* Block until the FULL message received */
-    LOGW("phornyac: recv_policy_req: calling recv() of size %d from fd %d "
-            "with flags=0x%X", size, sockfd, flags);
+    //LOGW("phornyac: recv_policy_req: calling recv() of size %d from fd %d "
+    //        "with flags=0x%X", size, sockfd, flags);
     ret = recv(sockfd, msg, size, flags);
     if (ret < 0) {
         LOGW("phornyac: recv_policy_req: error number: %d", errno);
@@ -76,7 +76,7 @@ int recv_policy_req(int sockfd, policy_req *msg) {
     if (ret == 0) {
         LOGW("phornyac: recv_policy_req: recv() returned 0, meaning "
                 "server has performed orderly shutdown on socket");
-        LOGW("phornyac: recv_policy_req: returning 0");
+        LOGW("phornyac: recv_policy_req: returning 1");
         return 1;
     }
     if (ret != size) {
@@ -86,44 +86,20 @@ int recv_policy_req(int sockfd, policy_req *msg) {
         LOGW("phornyac: recv_policy_req: returning -1");
         return -1;
     }
-    LOGW("phornyac: recv_policy_req: recv() returned success, "
-            "returning 0");
+    //LOGW("phornyac: recv_policy_req: recv() returned success, "
+    //        "returning 0");
     return 0;
-#if 0
-            //bytes_read = 0;
-            //msg_size = sizeof(msg_read);
-            //buf = (char *)&msg_read;
-            //read_ret = -1;
-            ////while ((bytes_read < msg_size) && (read_ret != 0)) {
-            //while (0) {  /* test code */
-            //    LOGW("phornyac: allowExposeNetworkImpl(): calling read() "
-            //            "on policy_sockfd, msg_size=%d, bytes_read=%d",
-            //            msg_size, bytes_read);
-            //    read_ret = read(policy_sockfd, buf, msg_size);
-            //    if (read_ret < 0) {
-            //        LOGW("phornyac: allowExposeNetworkImpl(): read() "
-            //                "returned read_ret=%d, doing nothing", read_ret);
-            //        break;  /* exit while loop */
-            //    }
-            //    LOGW("phornyac: allowExposeNetworkImpl(): read() "
-            //            "returned %d bytes read", read_ret);
-            //    bytes_read += read_ret;
-            //    buf += read_ret;
-            //}
-            ////LOGW("phornyac: allowExposeNetworkImpl(): "
-            ////        "msg_read contents: %s", msg_read.msg);
-#endif
 }
 
 int send_policy_resp(int sockfd, policy_resp *msg) {
     int size, flags, ret;
 
-    LOGW("phornyac: send_policy_resp: entered");
+    //LOGW("phornyac: send_policy_resp: entered");
 
     size = sizeof(*msg);
     flags = 0;  /* See send(2) */
-    LOGW("phornyac: send_policy_resp: calling send() of size %d to fd %d "
-            "with flags=0x%X", size, sockfd, flags);
+    //LOGW("phornyac: send_policy_resp: calling send() of size %d to fd %d "
+    //        "with flags=0x%X", size, sockfd, flags);
     ret = send(sockfd, msg, size, flags);
     if (ret < 0) {
         LOGW("phornyac: send_policy_resp: error number: %d (EPIPE=%d)",
@@ -139,20 +115,20 @@ int send_policy_resp(int sockfd, policy_resp *msg) {
         LOGW("phornyac: send_policy_resp: returning -1");
         return -1;
     }
-    LOGW("phornyac: send_policy_resp: send() returned success, "
-            "returning 0");
+    //LOGW("phornyac: send_policy_resp: send() returned success, "
+    //        "returning 0");
     return 0;
 }
 
 int recv_policy_resp(int sockfd, policy_resp *msg) {
     int size, flags, ret;
 
-    LOGW("phornyac: recv_policy_resp: entered");
+    //LOGW("phornyac: recv_policy_resp: entered");
 
     size = sizeof(*msg);
     flags = MSG_WAITALL;  /* Block until the FULL message received */
-    LOGW("phornyac: recv_policy_resp: calling recv() of size %d from fd %d "
-            "with flags=0x%X", size, sockfd, flags);
+    //LOGW("phornyac: recv_policy_resp: calling recv() of size %d from fd %d "
+    //        "with flags=0x%X", size, sockfd, flags);
     ret = recv(sockfd, msg, size, flags);
     if (ret < 0) {
         LOGW("phornyac: recv_policy_resp: error number: %d", errno);
@@ -163,7 +139,7 @@ int recv_policy_resp(int sockfd, policy_resp *msg) {
     if (ret == 0) {
         LOGW("phornyac: recv_policy_resp: recv() returned 0, meaning "
                 "server has performed orderly shutdown on socket");
-        LOGW("phornyac: recv_policy_resp: returning 0");
+        LOGW("phornyac: recv_policy_resp: returning 1");
         return 1;
     }
     if (ret != size) {
@@ -173,8 +149,8 @@ int recv_policy_resp(int sockfd, policy_resp *msg) {
         LOGW("phornyac: recv_policy_resp: returning -1");
         return -1;
     }
-    LOGW("phornyac: recv_policy_resp: recv() returned success, "
-            "returning 0");
+    //LOGW("phornyac: recv_policy_resp: recv() returned success, "
+    //        "returning 0");
     return 0;
 }
 

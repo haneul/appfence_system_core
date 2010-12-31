@@ -34,7 +34,7 @@
 int construct_policy_req(policy_req *msg, int request_code,
         const char *process_name, const char *dest_name,
         int taint_tag) {
-    LOGW("phornyac: construct_policy_req: entered");
+    //LOGW("phornyac: construct_policy_req: entered");
     if (msg == NULL) {
         LOGW("phornyac: construct_policy_req: msg is NULL, "
                 "returning -1");
@@ -75,18 +75,18 @@ int construct_policy_req(policy_req *msg, int request_code,
         msg->entry.dest_name[POLICYD_STRING_SIZE-1] = '\0';
     }
 
-    LOGW("phornyac: construct_policy_req: returning sizeof(policy_req) "
-            "(%d)", sizeof(policy_req));
+    //LOGW("phornyac: construct_policy_req: returning sizeof(policy_req) "
+    //        "(%d)", sizeof(policy_req));
     return (sizeof(policy_req));
 }
 
 int send_policy_request(int sockfd, policy_req *request,
         policy_resp *response) {
     int ret;
-    LOGW("phornyac: send_policy_request: entered");
+    //LOGW("phornyac: send_policy_request: entered");
 
-    LOGW("phornyac: send_policy_request: calling send_policy_req() "
-            "with sockfd=%d", sockfd);
+    //LOGW("phornyac: send_policy_request: calling send_policy_req() "
+    //        "with sockfd=%d", sockfd);
     ret = send_policy_req(sockfd, request);
     if (ret < 0) {
         LOGW("phornyac: send_policy_request: send_policy_req() "
@@ -95,8 +95,8 @@ int send_policy_request(int sockfd, policy_req *request,
         return -1;
     }
 
-    LOGW("phornyac: send_policy_request: send_policy_req() succeeded, "
-            "calling recv_policy_resp()");
+    //LOGW("phornyac: send_policy_request: send_policy_req() succeeded, "
+    //        "calling recv_policy_resp()");
     ret = recv_policy_resp(sockfd, response);
     if (ret < 0) {
         LOGW("phornyac: send_policy_request: recv_policy_resp() "
@@ -110,28 +110,6 @@ int send_policy_request(int sockfd, policy_req *request,
             "printing response");
     print_policy_resp(response);
 
-    LOGW("phornyac: send_policy_request: returning 0");
+    //LOGW("phornyac: send_policy_request: returning 0");
     return 0;
-
-            //bytes_read = 0;
-            //msg_size = sizeof(msg_read);
-            //buf = (char *)&msg_read;
-            //read_ret = -1;
-            ////while ((bytes_read < msg_size) && (read_ret != 0)) {
-            //while (0) {  /* test code */
-            //    LOGW("phornyac: allowExposeNetworkImpl(): calling read() "
-            //            "on policy_sockfd, msg_size=%d, bytes_read=%d",
-            //            msg_size, bytes_read);
-            //    read_ret = read(policy_sockfd, buf, msg_size);
-            //    if (read_ret < 0) {
-            //        LOGW("phornyac: allowExposeNetworkImpl(): read() "   
-            //                "returned read_ret=%d, doing nothing", read_ret);
-            //        break;  /* exit while loop */
-            //    }
-            //    LOGW("phornyac: allowExposeNetworkImpl(): read() "
-            //            "returned %d bytes read", read_ret);
-            //    bytes_read += read_ret;
-            //    buf += read_ret;
-            //}
 }
-

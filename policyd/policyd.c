@@ -197,12 +197,12 @@ int handle_inotify_event(int inotify_fd) {
  * Returns: size of policy_resp on success, negative on error.
  */
 int construct_policy_resp(policy_resp *msg, int response_code) {
-    LOGW("phornyac: construct_policy_resp: entered");
+    //LOGW("phornyac: construct_policy_resp: entered");
 
     msg->response_code = response_code;
 
-    LOGW("phornyac: construct_policy_resp: returning sizeof(policy_resp) "
-            "(%d)", sizeof(policy_resp));
+    //LOGW("phornyac: construct_policy_resp: returning sizeof(policy_resp) "
+    //        "(%d)", sizeof(policy_resp));
     return (sizeof(policy_resp));
 }
 
@@ -400,7 +400,7 @@ int handle_request(int sockfd, int from_settings) {
     policy_req request;
     policy_resp response;
     int response_code;
-    LOGW("phornyac: handle_request: entered");
+    //LOGW("phornyac: handle_request: entered");
 
     /* First, get the request: */
     ret = recv_policy_req(sockfd, &request);
@@ -419,7 +419,7 @@ int handle_request(int sockfd, int from_settings) {
     print_policy_req(&request);
 
     /* Formulate the response: */
-    LOGW("phornyac: handle_request: passing request to switch_on_request()");
+    //LOGW("phornyac: handle_request: passing request to switch_on_request()");
     ret = switch_on_request(&request, from_settings);
     if (ret < 0) {
         LOGW("phornyac: handle_request: switch_on_request() returned "
@@ -444,8 +444,8 @@ int handle_request(int sockfd, int from_settings) {
                 "error %d, returning -1", ret);
         return -1;
     }
-    LOGW("phornyac: handle_request: send_policy_resp() succeeded, "
-            "returning 0");
+    //LOGW("phornyac: handle_request: send_policy_resp() succeeded, "
+    //        "returning 0");
     return 0;
 }
 
@@ -461,7 +461,7 @@ int accept_new(int sockfd) {
     int accept_fd;
     char sa_data[15];
 
-    LOGW("phornyac: accept_new: entered");
+    //LOGW("phornyac: accept_new: entered");
 
     /**
      * There should be a connection waiting to be accepted on
@@ -476,11 +476,11 @@ int accept_new(int sockfd) {
      *  present on the queue, accept() fails with the error EAGAIN or
      *  EWOULDBLOCK."
      */
-    LOGW("phornyac: accept_new: calling accept(%d)",
-            sockfd);
+    //LOGW("phornyac: accept_new: calling accept(%d)",
+    //        sockfd);
     alen = sizeof(addr);
     ret = accept(sockfd, &addr, &alen);
-    LOGW("phornyac: accept_new: accept() returned %d", ret);
+    //LOGW("phornyac: accept_new: accept() returned %d", ret);
     if (ret < 0) {
         LOGW("phornyac: accept_new: error number: %d",
                 errno);
@@ -497,8 +497,8 @@ int accept_new(int sockfd) {
                 accept_fd, (int)addr.sa_family, sa_data);
     }
 
-    LOGW("phornyac: accept_new: returning accepted fd %d",
-            accept_fd);
+    //LOGW("phornyac: accept_new: returning accepted fd %d",
+    //        accept_fd);
     return accept_fd;
 }
 
@@ -511,7 +511,7 @@ int accept_settings(int sockfd) {
     int i, ret;
     int accepted_fd;
 
-    LOGW("phornyac: accept_settings: entered");
+    //LOGW("phornyac: accept_settings: entered");
 
     /**
      * There should be a connection waiting to be accepted on
@@ -526,8 +526,8 @@ int accept_settings(int sockfd) {
      *  present on the queue, accept() fails with the error EAGAIN or
      *  EWOULDBLOCK."
      */
-    LOGW("phornyac: accept_settings: calling accept(%d)",
-            sockfd);
+    //LOGW("phornyac: accept_settings: calling accept(%d)",
+    //        sockfd);
     ret = accept_new(sockfd);
     if (ret < 0) {
         LOGW("phornyac: accept_settings: accept_new() returned "
@@ -535,12 +535,12 @@ int accept_settings(int sockfd) {
         return -1;
     } else {
         accepted_fd = ret;
-        LOGW("phornyac: accept_settings: accept_new() returned "
-               "accepted_fd=%d", accepted_fd);
+        //LOGW("phornyac: accept_settings: accept_new() returned "
+        //       "accepted_fd=%d", accepted_fd);
     }
 
-    LOGW("phornyac: accept_settings: returning accepted_fd=%d",
-            accepted_fd);
+    //LOGW("phornyac: accept_settings: returning accepted_fd=%d",
+    //        accepted_fd);
     return accepted_fd;
 }
 
@@ -553,7 +553,7 @@ int accept_app(int sockfd) {
     int i, ret;
     int accepted_fd;
 
-    LOGW("phornyac: accept_app: entered");
+    //LOGW("phornyac: accept_app: entered");
 
     /**
      * There should be a connection waiting to be accepted on
@@ -568,8 +568,8 @@ int accept_app(int sockfd) {
      *  present on the queue, accept() fails with the error EAGAIN or
      *  EWOULDBLOCK."
      */
-    LOGW("phornyac: accept_app: calling accept_new(%d)",
-            sockfd);
+    //LOGW("phornyac: accept_app: calling accept_new(%d)",
+    //        sockfd);
     ret = accept_new(sockfd);
     if (ret < 0) {
         LOGW("phornyac: accept_app: accept_new() returned "
@@ -577,12 +577,12 @@ int accept_app(int sockfd) {
         return -1;
     } else {
         accepted_fd = ret;
-        LOGW("phornyac: accept_app: accept_new() returned "
-               "accepted_fd=%d", accepted_fd);
+        //LOGW("phornyac: accept_app: accept_new() returned "
+        //       "accepted_fd=%d", accepted_fd);
     }
 
-    LOGW("phornyac: accept_app: returning accepted_fd=%d",
-            accepted_fd);
+    //LOGW("phornyac: accept_app: returning accepted_fd=%d",
+    //        accepted_fd);
     return accepted_fd;
 }
 
@@ -603,9 +603,9 @@ int accept_loop(int inotify_fd, int sockfd_settings, int sockfd_app) {
     #undef max
     #define max(x,y) ((x) > (y) ? (x) : (y))
 
-    LOGW("phornyac: accept_loop: entered");
-    LOGW("phornyac: accept_loop: sockfd_settings=%d, sockfd_app=%d",
-            sockfd_settings, sockfd_app);
+    //LOGW("phornyac: accept_loop: entered");
+    //LOGW("phornyac: accept_loop: sockfd_settings=%d, sockfd_app=%d",
+    //        sockfd_settings, sockfd_app);
     err_count = 0;
     
     /**
@@ -657,11 +657,11 @@ int accept_loop(int inotify_fd, int sockfd_settings, int sockfd_app) {
         rd_ret = rd_set;
         wr_ret = wr_set;
         er_ret = er_set;
-        LOGW("phornyac: accept_loop: sockfd_settings=%d, "
-                "sockfd_app=%d, accepted_settings_fd=%d",
-                sockfd_settings, sockfd_app, accepted_settings_fd);
-        LOGW("phornyac: accept_loop: calling select() with nfds=%d and "
-                "NULL timeout", nfds);
+        //LOGW("phornyac: accept_loop: sockfd_settings=%d, "
+        //        "sockfd_app=%d, accepted_settings_fd=%d",
+        //        sockfd_settings, sockfd_app, accepted_settings_fd);
+        //LOGW("phornyac: accept_loop: calling select() with nfds=%d and "
+        //        "NULL timeout", nfds);
         ret = select(nfds + 1, &rd_ret, &wr_ret, &er_ret, NULL);
         if (ret < 0) {
             LOGW("phornyac: accept_loop: error number %d (EINTR is %d)",
@@ -676,8 +676,8 @@ int accept_loop(int inotify_fd, int sockfd_settings, int sockfd_app) {
             err_count++;
             continue;
         }
-        LOGW("phornyac: accept_loop: select() returned %d fds still in "
-                "the fd sets", ret);
+        //LOGW("phornyac: accept_loop: select() returned %d fds still in "
+        //        "the fd sets", ret);
 
         /**
          * Handle the fds that are ready to be read. To avoid tracking a
@@ -685,8 +685,8 @@ int accept_loop(int inotify_fd, int sockfd_settings, int sockfd_app) {
          * which we maintain as the maximum fd value in the sets. This is
          * pretty inefficient, but oh well.
          */
-        LOGW("phornyac: accept_loop: starting for loop up to nfds=%d",
-                nfds);
+        //LOGW("phornyac: accept_loop: starting for loop up to nfds=%d",
+        //        nfds);
         for (i = 0; i <= nfds; i++) {
             if (FD_ISSET(i, &rd_ret)) {
                 LOGW("phornyac: accept_loop: fd %d is ready for reading",
@@ -711,7 +711,7 @@ int accept_loop(int inotify_fd, int sockfd_settings, int sockfd_app) {
                         }
                     }
                 } else if (i == sockfd_settings) {  /* New connection from Settings */
-                    LOGW("phornyac: accept_loop: new connection from Settings");
+                    //LOGW("phornyac: accept_loop: new connection from Settings");
                     /* Accept connection:*/
                     ret = accept_settings(sockfd_settings);
                     if (ret < 0) {
@@ -727,7 +727,7 @@ int accept_loop(int inotify_fd, int sockfd_settings, int sockfd_app) {
                     FD_SET(ret, &rd_set);
                     nfds = max(nfds, ret);
                 } else if (i == sockfd_app) {  /* New connection from app */
-                    LOGW("phornyac: accept_loop: new connection from app");
+                    //LOGW("phornyac: accept_loop: new connection from app");
                     /* Accept connection:*/
                     ret = accept_app(sockfd_app);
                     if (ret < 0) {
@@ -773,15 +773,15 @@ int accept_loop(int inotify_fd, int sockfd_settings, int sockfd_app) {
             } else if (FD_ISSET(i, &er_ret)) {
                 LOGW("phornyac: accept_loop: fd %d has exception? "
                         "...doing nothing", i);
-            } else {
-                LOGW("phornyac: accept_loop: nothing to do for fd %d", i);
-            }
+            } //else {
+              //  LOGW("phornyac: accept_loop: nothing to do for fd %d", i);
+              //}
             //TODO: when do we close fds???
         } //for()
 
         //XXX: when do we exit the while loop??
-        LOGW("phornyac: accept_loop: reached end of while loop, "
-                "looping again");
+        //LOGW("phornyac: accept_loop: reached end of while loop, "
+        //        "looping again");
 
     } //while()
     LOGW("phornyac: accept_loop: finished (why?), returning 0");
