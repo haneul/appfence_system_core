@@ -219,10 +219,10 @@ int handle_query(policy_entry *entry) {
                 "returning POLICY_RESP_ALLOW");
         return POLICY_RESP_ALLOW;
     }
-    LOGW("phornyac: handle_query: global_enable_enforcement is set, "
-            "continuing with enforcement");
+    //LOGW("phornyac: handle_query: global_enable_enforcement is set, "
+    //        "continuing with enforcement");
 
-    LOGW("phornyac: handle_query: calling query_policydb()");
+    //LOGW("phornyac: handle_query: calling query_policydb()");
     ret = query_policydb(entry);
     if (ret < 0) {
         LOGW("phornyac: handle_query: query_policydb() returned "
@@ -305,7 +305,7 @@ int handle_del_entry(policy_entry *entry) {
  */
 int switch_on_request(policy_req *request, int from_settings) {
     int ret;
-    LOGW("phornyac: switch_on_request: entered");
+    //LOGW("phornyac: switch_on_request: entered");
     
 #if 0
     POLICY_REQ_QUERY,         //Query the db for this transmission
@@ -414,8 +414,8 @@ int handle_request(int sockfd, int from_settings) {
                 "returning -1");
         return -1;
     }
-    LOGW("phornyac: handle_request: recv_policy_req() succeeded, printing "
-            "request:");
+    //LOGW("phornyac: handle_request: recv_policy_req() succeeded, printing "
+    //        "request:");
     print_policy_req(&request);
 
     /* Formulate the response: */
@@ -427,8 +427,8 @@ int handle_request(int sockfd, int from_settings) {
         return -1;
     }
     response_code = ret;
-    LOGW("phornyac: handle_request: switch_on_request() returned "
-            "response code %d", response_code);
+    //LOGW("phornyac: handle_request: switch_on_request() returned "
+    //        "response code %d", response_code);
 
     ret = construct_policy_resp(&response, response_code);
     if (ret < 0) {
@@ -492,9 +492,9 @@ int accept_new(int sockfd) {
         for (i = 0; i < 14; i++)
             sa_data[i] = addr.sa_data[i];
         sa_data[14] = '\0';
-        LOGW("phornyac: accept_new: accepted new socket connection, "
-                "accept_fd=%d, family=%d, data=%s",
-                accept_fd, (int)addr.sa_family, sa_data);
+        //LOGW("phornyac: accept_new: accepted new socket connection, "
+        //        "accept_fd=%d, family=%d, data=%s",
+        //        accept_fd, (int)addr.sa_family, sa_data);
     }
 
     //LOGW("phornyac: accept_new: returning accepted fd %d",
@@ -689,13 +689,13 @@ int accept_loop(int inotify_fd, int sockfd_settings, int sockfd_app) {
         //        nfds);
         for (i = 0; i <= nfds; i++) {
             if (FD_ISSET(i, &rd_ret)) {
-                LOGW("phornyac: accept_loop: fd %d is ready for reading",
-                        i);
+                //LOGW("phornyac: accept_loop: fd %d is ready for reading",
+                //        i);
                 if (i == inotify_fd) {  /* policydb XML file has changed */
                     LOGW("phornyac: accept_loop: inotify_fd ready for "
                             "reading, policydb XML file has changed");
-                    LOGW("phornyac: accept_loop: calling "
-                            "handle_inotify_event()");
+                    //LOGW("phornyac: accept_loop: calling "
+                    //        "handle_inotify_event()");
                     ret = handle_inotify_event(i);
                     if (ret < 0) {
                         LOGW("phornyac: accept_loop: handle_inotify_event() "
@@ -737,19 +737,19 @@ int accept_loop(int inotify_fd, int sockfd_settings, int sockfd_app) {
                         err_count++;
                     }
                     /* Add new fd to read set and adjust nfds: */
-                    LOGW("phornyac: accept_loop: accept_app() returned "
-                            "fd %d, adding to rd_set", ret);
+                    //LOGW("phornyac: accept_loop: accept_app() returned "
+                    //        "fd %d, adding to rd_set", ret);
                     FD_SET(ret, &rd_set);
                     nfds = max(nfds, ret);
                 } else {
                     /* Check if the request is from the settings app: */
                     if (i == accepted_settings_fd) {
-                        LOGW("phornyac: accept_loop: existing connection from "
-                                "Settings");
+                        //LOGW("phornyac: accept_loop: existing connection from "
+                        //        "Settings");
                         from_settings = 1;
                     } else {
-                        LOGW("phornyac: accept_loop: existing connection from "
-                                "app");
+                        //LOGW("phornyac: accept_loop: existing connection from "
+                        //        "app");
                         from_settings = 0;
                     }
                     /* Handle the request: */
@@ -764,8 +764,8 @@ int accept_loop(int inotify_fd, int sockfd_settings, int sockfd_app) {
                         FD_CLR(i, &rd_set);
                         err_count++;
                     }
-                    LOGW("phornyac: accept_loop: handle_request() "
-                            "returned ok");
+                    //LOGW("phornyac: accept_loop: handle_request() "
+                    //        "returned ok");
                 }
            } else if (FD_ISSET(i, &wr_ret)) {
                 LOGW("phornyac: accept_loop: fd %d is ready for writing? "
