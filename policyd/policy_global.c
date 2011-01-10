@@ -155,10 +155,19 @@ int recv_policy_resp(int sockfd, policy_resp *msg) {
 }
 
 void print_policy_req(policy_req *msg) {
-    LOGW("phornyac: print_policy_req: request_code=%d, entry.process_name=%s, "
-            "entry.dest_name=%s, entry.taint_tag=0x%X, entry.app_status=%d",
-            msg->request_code, msg->entry.process_name, msg->entry.dest_name,
-            msg->entry.taint_tag, msg->entry.app_status);
+    /* Use slightly different log format for untainted request,
+     * so can be easily separated in logs: */
+    if (msg->entry.taint_tag == 0) {
+        LOGW("phornyac: print_policy_req: request_code=%d, entry.process_name=%s, "
+                "entry.dest_name=%s, entry untainted, entry.app_status=%d",
+                msg->request_code, msg->entry.process_name, msg->entry.dest_name,
+                msg->entry.app_status);
+    } else {
+        LOGW("phornyac: print_policy_req: request_code=%d, entry.process_name=%s, "
+                "entry.dest_name=%s, entry.taint_tag=0x%X, entry.app_status=%d",
+                msg->request_code, msg->entry.process_name, msg->entry.dest_name,
+                msg->entry.taint_tag, msg->entry.app_status);
+    }
 }
 
 void print_policy_resp(policy_resp *msg) {
