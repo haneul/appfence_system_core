@@ -30,7 +30,8 @@
  * Returns: size of policy_req on success, negative on error.
  */
 int construct_policy_req(policy_req *msg, int request_code, 
-        const char *process_name, const char *dest_name, int taint_tag);
+        const char *process_name, const char *dest_name, int taint_tag,
+        const char *hostname);
 
 /**
  * Sends the policy_req to the policyd, which should be connected on

@@ -33,7 +33,7 @@
  */
 int construct_policy_req(policy_req *msg, int request_code,
         const char *process_name, const char *dest_name,
-        int taint_tag) {
+        int taint_tag, const char *hostname) {
     //LOGW("phornyac: construct_policy_req: entered");
     if (msg == NULL) {
         LOGW("phornyac: construct_policy_req: msg is NULL, "
@@ -73,6 +73,20 @@ int construct_policy_req(policy_req *msg, int request_code,
         strncpy(msg->entry.dest_name, dest_name,
                 POLICYD_STRING_SIZE-1);
         msg->entry.dest_name[POLICYD_STRING_SIZE-1] = '\0';
+    }
+
+    if (hostname == NULL) {
+        LOGW("phornyac: construct_policy_req: warning, hostname "
+                "is NULL!");
+        msg->entry.hostname[0] = '\0';
+    } else {
+        if (strlen(hostname) >= POLICYD_STRING_SIZE) {
+            LOGW("phornyac: construct_policy_req: hostname too long, "
+                    "will be truncated in policy_entry");
+        }
+        strncpy(msg->entry.hostname, hostname,
+                POLICYD_STRING_SIZE-1);
+        msg->entry.hostname[POLICYD_STRING_SIZE-1] = '\0';
     }
 
     //LOGW("phornyac: construct_policy_req: returning sizeof(policy_req) "

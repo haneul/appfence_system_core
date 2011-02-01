@@ -159,14 +159,16 @@ void print_policy_req(policy_req *msg) {
      * so can be easily separated in logs: */
     if (msg->entry.taint_tag == 0) {
         LOGW("phornyac: print_policy_req: request_code=%d, entry.process_name=%s, "
-                "entry.dest_name=%s, entry untainted, entry.app_status=%d",
+                "entry.dest_name=%s, entry.hostname=%s, entry untainted, "
+                "entry.app_status=%d",
                 msg->request_code, msg->entry.process_name, msg->entry.dest_name,
-                msg->entry.app_status);
+                msg->entry.hostname, msg->entry.app_status);
     } else {
         LOGW("phornyac: print_policy_req: request_code=%d, entry.process_name=%s, "
-                "entry.dest_name=%s, entry.taint_tag=0x%X, entry.app_status=%d",
+                "entry.dest_name=%s, entry.hostname=%s, entry.taint_tag=0x%X, "
+                "entry.app_status=%d",
                 msg->request_code, msg->entry.process_name, msg->entry.dest_name,
-                msg->entry.taint_tag, msg->entry.app_status);
+                msg->entry.hostname, msg->entry.taint_tag, msg->entry.app_status);
     }
 }
 

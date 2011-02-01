@@ -57,6 +57,7 @@ typedef struct _policy_entry {
     char process_name[POLICYD_STRING_SIZE];
     char dest_name[POLICYD_STRING_SIZE];
     int taint_tag;
+    char hostname[POLICYD_STRING_SIZE];
     int app_status;  /* currently unused */
 } policy_entry;
 
